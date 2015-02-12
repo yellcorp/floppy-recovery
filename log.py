@@ -26,12 +26,12 @@ def _detect_open(path):
 	return None
 
 
-_COMMON_SIZES = [ 1474560, 737280 ] # must be sorted descending
+_COMMON_SIZES = [ 737280, 1474560 ] # must be sorted ascending
 def _minimum_common_size(s):
 	if s == 0:
 		return 0
 	for cs in _COMMON_SIZES:
-		if s >= cs:
+		if s <= cs:
 			return cs
 	raise ValueError("No common size that can acommodate an image of {0} bytes".format(s))
 
