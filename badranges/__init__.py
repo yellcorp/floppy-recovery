@@ -6,7 +6,7 @@ import os
 import re
 import sys
 
-from mediageom import DiskGeometry
+from badranges.mediageom import DiskGeometry
 
 
 _PREFIX_TO_ENCODING = (
@@ -55,7 +55,7 @@ def _normalize_ranges(ranges):
 
 def _validate_badrange_result(log_reader_func):
 	def validating_func(image_size, log_line_iter):
-		expected_size, bad_ranges = log_reader_func(image_size, log_stream)
+		expected_size, bad_ranges = log_reader_func(image_size, log_line_iter)
 		if expected_size > image_size:
 			print >> sys.stderr, "Expected size for {0} is {1}, but is actually {2}".format(
 				image_path, expected_size, image_size)
@@ -185,8 +185,3 @@ def read_badranges_for_file(image_path):
 			return read_log_autodetect(image_size, log_stream)
 	except EnvironmentError:
 		return [ ]
-
-
-if __name__ == '__main__':
-	for start, size in read_badranges_for_file(sys.argv[1]):
-		print "0x{0:08X}  0x{1:08X}".format(start, size)
