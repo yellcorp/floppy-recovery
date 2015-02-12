@@ -6,7 +6,7 @@ import os
 import re
 import sys
 
-from badranges.mediageom import DiskGeometry
+from validity.mediageom import DiskGeometry
 
 
 _PREFIX_TO_ENCODING = (
@@ -37,32 +37,29 @@ def _minimum_common_size(s):
 
 
 def _normalize_ranges(ranges):
-	intervals = [ (start, start + size) for start, size in ranges ]
-	if len(intervals) == 0:
-		return [ ]
-	ordered_intervals = sorted(intervals, key=operator.itemgetter(0))
-	merged_intervals = ordered_intervals[0:1]
-	for start, end in ordered_intervals[1:]:
-		last_interval = merged_intervals[-1]
-		if start == last_interval[1]:
-			merged_intervals[-1] = (last_interval[0], end)
+	if len(ranges) <= 0:
+		return ranges[:]
+	ordered_ranges = sorted(ranges, key=operator.itemgetter(0))
+	merged_ranges = ordered_ranges[0:1]
+	for start, end in ordered_ranges[1:]:
+		last_range = merged_ranges[-1]
+		if start == last_range[1]:
+			merged_ranges[-1] = (last_range[0], end)
 		else:
-			if start < last_interval[1]:
+			if start < last_range[1]:
 				print >> sys.stderr, "Overlapping range"
-			merged_intervals.append((start, end))
-	return [ (start, end - start) for start, end in merged_intervals ]
+			merged_ranges.append((start, end))
+	return merged_ranges
 
 
-def _validate_badrange_result(log_reader_func):
-	def validating_func(image_size, log_line_iter):
-		expected_size, bad_ranges = log_reader_func(image_size, log_line_iter)
-		if expected_size > image_size:
-			print >> sys.stderr, "Expected size for {0} is {1}, but is actually {2}".format(
-				image_path, expected_size, image_size)
-			bad_ranges.append((image_size, expected_size - image_size))
-		return _normalize_ranges(bad_ranges)
-
-	return validating_func
+def _invert_ranges(ranges, domain):
+	inverted = [ ]
+	last_end = 0
+	for start, end in _normalize_ranges(ranges):
+		inverted.append((last_end, start))
+		last_end = end
+	inverted.append((last_end, domain))
+	return [ r for r in inverted if r[0] != r[1] ]
 
 
 _WINIMAGE_ERROR = re.compile(
@@ -73,30 +70,27 @@ def _parse_winimage_error(geometry, text):
 		track, head = map(int, match.group("track", "head"))
 		bad_start = geometry.chs_to_byte(track, head, 1)
 		bad_len = geometry.sectors * geometry.sector_size
-		return (bad_start, bad_len)
+		return (bad_start, bad_start + bad_len)
 	return None
 
 
-@_validate_badrange_result
 def read_winimage_pasted(image_size, log_line_iter):
 	expected_size = _minimum_common_size(image_size)
 	geometry = DiskGeometry.from_image_size(expected_size)
 
-	bad_ranges = set()
-	for line in log_line_iter:
-		bad_range = _parse_winimage_error(geometry, line)
-		if bad_range is not None:
-			bad_ranges.add(bad_range)
+	bad_ranges = set(filter(None,
+		(_parse_winimage_error(geometry, line) for line in log_line_iter)
+	))
 
-	return (expected_size, bad_ranges)
+	return _invert_ranges(bad_ranges, expected_size)
 
 
-@_validate_badrange_result
 def read_winimage_scripted(image_size, log_line_iter):
 	expected_size = _minimum_common_size(image_size)
 	geometry = DiskGeometry.from_image_size(expected_size)
 
 	bad_ranges = [ ]
+
 	for line in log_line_iter:
 		enc_dialog, success_str, retries_str = line.split("\t")
 		if success_str == "True":
@@ -107,14 +101,13 @@ def read_winimage_scripted(image_size, log_line_iter):
 			if bad_range is not None:
 				bad_ranges.append(bad_range)
 
-	return (expected_size, bad_ranges)
+	return _invert_ranges(bad_ranges, expected_size)
 
 
 _FAUDD_EXPECT_SIZE = re.compile(
 	r"^\tEstimated Total Size:\t(?P<size>\d+)")
 _FAUDD_BAD_RANGE = re.compile(
 	r"^File data in the range 0x(?P<start>[0-9A-Fa-f]+)-0x(?P<end>[0-9A-Fa-f]+) could not be read\.")
-@_validate_badrange_result
 def read_faudd_log(image_size, log_line_iter):
 	expected_size = None
 	bad_ranges = [ ]
@@ -127,16 +120,18 @@ def read_faudd_log(image_size, log_line_iter):
 		m = _FAUDD_BAD_RANGE.match(line)
 		if m:
 			start, end = [ int(s, 16) for s in m.group("start", "end") ]
-			bad_ranges.append((start, end - start))
+			bad_ranges.append((start, end))
 
-	return (expected_size, bad_ranges)
+	if image_size != expected_size:
+		bad_ranges.append((image_size, expected_size))
+
+	return _invert_ranges(bad_ranges, expected_size)
 
 
 _DDRESCUE_BLOCK = re.compile(
 	r"^0x(?P<start>[0-9A-Fa-f]+)\s+0x(?P<size>[0-9A-Fa-f]+)\s+(?P<status>[?*/FG+-])")
-@_validate_badrange_result
 def read_ddrescue_log(image_size, log_line_iter):
-	bad_ranges = [ ]
+	good_ranges = [ ]
 	seen_current_status = False
 
 	for line in log_line_iter:
@@ -149,11 +144,11 @@ def read_ddrescue_log(image_size, log_line_iter):
 
 		m = _DDRESCUE_BLOCK.match(line)
 		if m:
-			if m.group("status") != "+":
+			if m.group("status") == "+":
 				start, size = [ int(s, 16) for s in m.group("start", "size") ]
-				bad_ranges.append((start, size))
+				good_ranges.append((start, start + size))
 
-	return (image_size, bad_ranges)
+	return _normalize_ranges(good_ranges)
 
 
 _PREFIX_TO_READFUNC = (
@@ -166,7 +161,7 @@ def read_log_autodetect(image_size, log_line_iter):
 	try:
 		first_line = next(log_line_iter)
 	except StopIteration:
-		return (image_size, [ ])
+		return [( 0, image_size )]
 
 	log_reader_func = None
 	for prefix, func in _PREFIX_TO_READFUNC:
@@ -177,11 +172,11 @@ def read_log_autodetect(image_size, log_line_iter):
 	return log_reader_func(image_size, itertools.chain([ first_line ], log_line_iter))
 
 
-def read_badranges_for_file(image_path):
+def read_validity_for_file(image_path):
 	log_path = image_path + ".log"
 	image_size = os.path.getsize(image_path)
 	try:
 		with _detect_open(log_path) as log_stream:
 			return read_log_autodetect(image_size, log_stream)
 	except EnvironmentError:
-		return [ ]
+		return [( 0, image_size )]
