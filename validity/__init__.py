@@ -42,6 +42,8 @@ def _normalize_ranges(ranges):
 	ordered_ranges = sorted(ranges, key=operator.itemgetter(0))
 	merged_ranges = ordered_ranges[0:1]
 	for start, end in ordered_ranges[1:]:
+		if start == end:
+			continue
 		last_range = merged_ranges[-1]
 		if start == last_range[1]:
 			merged_ranges[-1] = (last_range[0], end)
@@ -122,10 +124,19 @@ def read_faudd_log(image_size, log_line_iter):
 			start, end = [ int(s, 16) for s in m.group("start", "end") ]
 			bad_ranges.append((start, end))
 
-	if image_size != expected_size:
-		bad_ranges.append((image_size, expected_size))
+	# faudd may have burped errors about ranges it didn't commit to the image file
+	clamped_bad_ranges = [ ]
+	for start, end in bad_ranges:
+		if start <= image_size:
+			if end <= image_size:
+				clamped_bad_ranges.append((start, end))
+			else:
+				clamped_bad_ranges.append((start, image_size))
 
-	return _invert_ranges(bad_ranges, expected_size)
+	if image_size != expected_size:
+		clamped_bad_ranges.append((image_size, expected_size))
+
+	return _invert_ranges(clamped_bad_ranges, expected_size)
 
 
 _DDRESCUE_BLOCK = re.compile(
