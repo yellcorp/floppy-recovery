@@ -1,8 +1,4 @@
-import operator
-
-
-def _product(iterable):
-	return reduce(operator.mul, iterable, 1)
+import disklib
 
 
 class DiskGeometry(object):
@@ -34,7 +30,7 @@ class DiskGeometry(object):
 	]
 
 	floppy_dimensions_by_size = dict(
-		(_product(dim), dim) for dim in floppy_dimensions
+		(disklib.product(dim), dim) for dim in floppy_dimensions
 	)
 
 	def __init__(self, cylinders, heads, sectors, sector_size):

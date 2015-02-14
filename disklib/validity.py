@@ -6,7 +6,7 @@ import os
 import re
 import sys
 
-from validity.mediageom import DiskGeometry
+from disklib.mediageom import DiskGeometry
 
 
 _PREFIX_TO_ENCODING = (

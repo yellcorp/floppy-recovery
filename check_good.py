@@ -11,7 +11,7 @@ import collections
 import operator
 import sys
 
-import validity
+import disklib.validity
 
 
 def compare_span(start, expected_size, buffers, indices):
@@ -105,7 +105,7 @@ def main():
 
 	try:
 		streams_and_validity = [
-			(open(path, "rb"), validity.read_validity_for_file(path))
+			(open(path, "rb"), disklib.validity.read_validity_for_file(path))
 			for path in paths
 		]
 		check_good(streams_and_validity)
