@@ -10,6 +10,7 @@ _VALID_BYTES_PER_SECTOR = tuple(1 << n for n in xrange(9, 13))
 _VALID_SECTORS_PER_CLUSTER = tuple(1 << n for n in xrange(0, 8))
 _VALID_MEDIA_BYTE = (0xF0,) + tuple(xrange(0xF8, 0x100))
 _VALID_DRIVE_NUM = (0x00, 0x80)
+_FAT_TYPE_CLUSTER_COUNT_CUTOVERS = (4085, 65525)
 _FAT_SIG = "\x55\xAA"
 
 class BiosParameterBlock(NamedStruct):
@@ -169,6 +170,12 @@ class FATVolume(object):
 			reported = self._total_sector_count
 			sign, level = (reported > expect) and ('>', _INVALID) or ('<', _UNCOMMON)
 			yield (level, "Reported sector count {1} Geometry sector count (0x{0:08X} {1} 0x{2:08X})".format(reported, sign, expect))
+
+		for cutover_count in _FAT_TYPE_CLUSTER_COUNT_CUTOVERS:
+			diff = cutover_count - self._cluster_count
+			if -16 < diff < 16:
+				yield (_UNCOMMON, "Cluster count {0} is close to cutover value {1}".format(self._cluster_count, cutover_count))
+				break
 
 		if b.BPB_Media not in _VALID_MEDIA_BYTE:
 			yield (_INVALID, "Invalid BPB_Media: 0x{0:02X}".format(b.BPB_Media))
