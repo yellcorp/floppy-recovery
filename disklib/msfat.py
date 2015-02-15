@@ -353,13 +353,7 @@ class FATVolume(object):
 		)
 
 	def _calc_data_sector_count(self):
-		b = self._bpb
-		return (
-			self._total_sector_count - (
-				b.BPB_RsvdSecCnt + b.BPB_NumFATs * self._fat_size +
-				self._root_dir_sector_count
-			)
-		)
+		return self._total_sector_count - self._calc_first_data_sector()
 
 	def _first_sector_of_cluster(self, n):
 		return (n - 2) * self._bpb.BPB_SecPerClus + self._first_data_sector
