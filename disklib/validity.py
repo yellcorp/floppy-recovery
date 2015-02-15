@@ -127,7 +127,7 @@ def read_winimage_pasted(image_size, log_line_iter):
 	))
 
 	if image_size < expected_size:
-		bad_ranges.append((image_size, expected_size))
+		bad_ranges.add((image_size, expected_size))
 
 	return ValidityRanges(expected_size, bad_ranges, invert=True)
 
