@@ -46,7 +46,7 @@ def parse_product(width_expr):
 
 
 def error_map(b):
-	return (b / 2 + 128, int(b * 0.75), int(b * 0.25), 255)
+	return (b / 2 + 128, b, int(b * 0.25), 255)
 
 
 def gray_map(b):
