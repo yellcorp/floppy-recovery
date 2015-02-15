@@ -15,6 +15,8 @@ def _normalize_ranges(ranges):
 	ordered_ranges = sorted(ranges, key=operator.itemgetter(0))
 	merged_ranges = ordered_ranges[0:1]
 	for start, end in ordered_ranges[1:]:
+		if start > end:
+			raise ValueError("Start > end: {0!r}".format((start, end)))
 		if start == end:
 			continue
 		last_range = merged_ranges[-1]
@@ -22,7 +24,9 @@ def _normalize_ranges(ranges):
 			merged_ranges[-1] = (last_range[0], end)
 		else:
 			if start < last_range[1]:
-				print >> sys.stderr, "Overlapping range"
+				raise ValueError("Overlapping range: {0!r} and {1!r}".format(
+					last_range, (start, end)
+				))
 			merged_ranges.append((start, end))
 	return merged_ranges
 
