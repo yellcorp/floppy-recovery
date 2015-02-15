@@ -162,6 +162,18 @@ _FAUDD_EXPECT_SIZE = re.compile(
 	r"^\tEstimated Total Size:\t(?P<size>\d+)")
 _FAUDD_BAD_RANGE = re.compile(
 	r"^File data in the range 0x(?P<start>[0-9A-Fa-f]+)-0x(?P<end>[0-9A-Fa-f]+) could not be read\.")
+
+# there's a bug (?) in fau-dd that, after a read error, writes every subsequent
+# byte offset by some number. this number increases for every read error. this
+# makes a disk image useless as all the sector/cluster pointers and
+# calculations become wrong.
+
+# i'm not sure if there's a pattern, or if i'm missing a cmdline argument, or
+# if it's worth recovering because we have 2 other means of reading. setting
+# this true causes the rest of an fau-dd image to be considered invalid after
+# the start of the first error
+_FAUDD_FIRST_ERROR_INVALIDATES_REST = True
+
 def read_faudd_log(image_size, log_line_iter):
 	expected_size = None
 	bad_ranges = [ ]
@@ -176,19 +188,20 @@ def read_faudd_log(image_size, log_line_iter):
 			start, end = [ int(s, 16) for s in m.group("start", "end") ]
 			bad_ranges.append((start, end))
 
-	# faudd may have burped errors about ranges it didn't commit to the image file
-	clamped_bad_ranges = [ ]
-	for start, end in bad_ranges:
-		if start <= image_size:
-			if end <= image_size:
-				clamped_bad_ranges.append((start, end))
-			else:
-				clamped_bad_ranges.append((start, image_size))
+	# faudd may have burped errors about ranges that it didn't commit to the
+	# image file
+	bad_ranges = [
+		(start, min(image_size, end)) for start, end in bad_ranges
+		if start <= image_size
+	]
 
 	if image_size != expected_size:
-		clamped_bad_ranges.append((image_size, expected_size))
+		bad_ranges.append((image_size, expected_size))
 
-	return ValidityRanges(expected_size, clamped_bad_ranges, invert=True)
+	if len(bad_ranges) > 0 and _FAUDD_FIRST_ERROR_INVALIDATES_REST:
+		bad_ranges = [ (bad_ranges[0][0], image_size) ]
+
+	return ValidityRanges(expected_size, bad_ranges, invert=True)
 
 
 _DDRESCUE_BLOCK = re.compile(
