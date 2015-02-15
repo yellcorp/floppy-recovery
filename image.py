@@ -66,24 +66,31 @@ def append_pixels(in_stream, count, out_bytearray, byte_to_pixel_function, void_
 
 
 def render_graphic(in_path, width, out_path):
-	good_ranges = disklib.validity.read_validity_for_file(in_path)
+	ranges = disklib.validity.read_validity_for_file(in_path)
 	graphic_buffer = bytearray()
 
-	position = 0
+	print in_path
 	with open(in_path, "rb") as in_stream:
-		for start, end in good_ranges:
-			append_pixels(in_stream, start - position, graphic_buffer, error_map, (255, 0, 0, 64))
-			append_pixels(in_stream, end - start,      graphic_buffer, gray_map,  (0, 0, 0, 0))
-			position = end
+		for is_good, start, end in ranges.iterall():
+			if is_good:
+				pixel_func = gray_map
+				void = (0, 0, 0, 0)
+			else:
+				pixel_func = error_map
+				void = (255, 0, 0, 64)
 
-	partial_row = position % width
-	if partial_row != 0:
-		graphic_buffer.extend(itertools.repeat((0, 0, 0, 0), width - partial_row))
-		position += width - partial_row
+			append_pixels(in_stream, end - start, graphic_buffer, pixel_func, void)
+
+	height, remainder = divmod(ranges.domain, width)
+
+	# partial_row = ranges.domain % width
+	if remainder != 0:
+		graphic_buffer.extend(itertools.repeat((0, 0, 0, 0), width - remainder))
+		height += 1
 
 	graphic = PIL.Image.frombuffer(
 		# frombuffer args
-		'RGBA', (width, position / width), graphic_buffer,
+		'RGBA', (width, height), graphic_buffer,
 		# decoder args
 		'raw', 'RGBA', 0, 1
 	)

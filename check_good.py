@@ -58,8 +58,8 @@ def check_good(streams_and_validity):
 	streams = [ s for s, _ in streams_and_validity ]
 
 	events_by_offset = collections.defaultdict(lambda: (set(), set()))
-	for i, sb in enumerate(streams_and_validity):
-		for good_start, good_end in sb[1]:
+	for i, sv in enumerate(streams_and_validity):
+		for good_start, good_end in sv[1].itergood():
 			# an event occurs at <good_start> bytes which ADDS stream i
 			# to the set of expected good streams
 			events_by_offset[good_start][ADDS].add(i)
