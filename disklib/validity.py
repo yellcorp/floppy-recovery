@@ -75,8 +75,8 @@ class ValidityRanges(object):
 				yield (False, expect_good_start, start)
 			yield (True, start, end)
 			expect_good_start = end
-		if end != self.domain:
-			yield (False, end, self.domain)
+		if expect_good_start != self.domain:
+			yield (False, expect_good_start, self.domain)
 
 
 _PREFIX_TO_ENCODING = (
