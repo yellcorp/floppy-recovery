@@ -200,7 +200,7 @@ class FATVolume(object):
 		self._seek_sector(0, 510)
 		sig = self._read(2)
 		if sig != _FAT_SIG:
-			yield (_INVALID, "No signature at byte 0x1FE: {0}".format(_hexdump(sig)))
+			yield (_INVALID, "No signature at byte 0x1FE: {0} (should be {1})".format(_hexdump(sig), _hexdump(_FAT_SIG)))
 
 
 	def _chkdsk16(self):
