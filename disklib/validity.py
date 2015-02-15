@@ -140,7 +140,7 @@ def read_winimage_scripted(image_size, log_line_iter):
 	expected_size = _minimum_common_size(image_size)
 	geometry = DiskGeometry.from_image_size(expected_size)
 
-	bad_ranges = [ ]
+	bad_ranges = set()
 
 	for line in log_line_iter:
 		enc_dialog, success_str, retries_str = line.split("\t")
@@ -150,10 +150,10 @@ def read_winimage_scripted(image_size, log_line_iter):
 		for dialog_line in re.split(r"[\n\r]+", dialog_text):
 			bad_range = _parse_winimage_error(geometry, dialog_line)
 			if bad_range is not None:
-				bad_ranges.append(bad_range)
+				bad_ranges.add(bad_range)
 
 	if image_size < expected_size:
-		bad_ranges.append((image_size, expected_size))
+		bad_ranges.add((image_size, expected_size))
 
 	return ValidityRanges(expected_size, bad_ranges, invert=True)
 
