@@ -164,6 +164,12 @@ class FATVolume(object):
 		elif b.BPB_TotSec16 != 0 and b.BPB_TotSec32 != 0:
 			yield (_INVALID, "Invalid sector count: Both BPB_TotSec16 (0x{0:04X}) and BPB_TotSec32 (0x{1:08X}) are nonzero".format(b.BPB_TotSec16, b.BPB_TotSec32))
 
+		if self._total_sector_count != self._geometry.total_sector_count():
+			expect = self._geometry.total_sector_count()
+			reported = self._total_sector_count
+			sign, level = (reported > expect) and ('>', _INVALID) or ('<', _UNCOMMON)
+			yield (level, "Reported sector count {1} Geometry sector count (0x{0:08X} {1} 0x{2:08X})".format(reported, sign, expect))
+
 		if b.BPB_Media not in _VALID_MEDIA_BYTE:
 			yield (_INVALID, "Invalid BPB_Media: 0x{0:02X}".format(b.BPB_Media))
 		# TODO: should equal the first byte of FAT
