@@ -3,6 +3,7 @@
 
 import argparse
 import itertools
+import os
 
 import PIL.Image
 
@@ -26,6 +27,12 @@ def get_arg_parser():
 		nargs="+",
 		help="""Files to convert to graphics. Output files will be named
 			{path}.{width}.{format}"""
+	)
+
+	p.add_argument(
+		"-f", "--force",
+		action="store_true",
+		help="""Overwrite existing graphic files"""
 	)
 
 	return p
@@ -111,7 +118,8 @@ def main():
 	for in_path in config.paths:
 		out_path = "{path}.{width}.{format}".format(
 			path=in_path, width=width, format=FORMAT)
-		render_graphic(in_path, width, out_path)
+		if config.force or not os.path.exists(out_path):
+			render_graphic(in_path, width, out_path)
 
 
 if __name__ == '__main__':
