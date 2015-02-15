@@ -71,8 +71,8 @@ class BiosParameterBlock32(NamedStruct):
 		("H",   "BPB_ExtFlags"), # See docs, but nothing to validate probably
 		("H",   "BPB_FSVer"),    # Version 0 seems to be the highest defined
 		("I",   "BPB_RootClus"), # Should be 2, but not required
-		("I",   "BPB_FSInfo"),
-		("I",   "BPB_BkBootSec"), # Should be 6
+		("H",   "BPB_FSInfo"),
+		("H",   "BPB_BkBootSec"), # Should be 6
 		("12s", "BPB_Reserved"), # Should be all \0
 
 		# Following are same as in BiosParameterBlock16, just different offsets
