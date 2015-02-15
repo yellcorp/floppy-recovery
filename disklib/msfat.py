@@ -101,6 +101,18 @@ def _hexdump(string):
 	return " ".join("{0:02X}".format(ord(c)) for c in string)
 
 
+# Log levels match values of equivalent severity in python logging module
+# Short names privately...
+_INVALID = 40
+_UNCOMMON = 30
+_INFO = 20
+
+# ...long names publicly
+CHKDSK_LOG_INVALID = _INVALID
+CHKDSK_LOG_UNCOMMON = _UNCOMMON
+CHKDSK_LOG_INFO = _INFO
+
+
 class FATVolume(object):
 	FAT12 = "FAT12"
 	FAT16 = "FAT16"
@@ -131,38 +143,38 @@ class FATVolume(object):
 		b32 = self._bpb32
 
 		if _COMMON_JMPBOOT.match(b.BS_jmpBoot) is None:
-			yield "Uncommon BS_jmpBoot: {0}".format(_hexdump(b.BS_jmpBoot))
+			yield (_UNCOMMON, "Uncommon BS_jmpBoot: {0}".format(_hexdump(b.BS_jmpBoot)))
 
-		yield "BS_OEMName: {0!r}".format(b.BS_OEMName)
+		yield (_INFO, "BS_OEMName: {0!r}".format(b.BS_OEMName))
 
 		if b.BPB_BytsPerSec not in _VALID_BYTES_PER_SECTOR:
-			yield "Invalid BPB_BytsPerSec: 0x{0:04X}".format(b.BPB_BytsPerSec)
+			yield (_INVALID, "Invalid BPB_BytsPerSec: 0x{0:04X}".format(b.BPB_BytsPerSec))
 
 		if b.BPB_SecPerClus not in _VALID_SECTORS_PER_CLUSTER:
-			yield "Invalid BPB_SecPerClus: 0x{0:02X}".format(b.BPB_SecPerClus)
+			yield (_INVALID, "Invalid BPB_SecPerClus: 0x{0:02X}".format(b.BPB_SecPerClus))
 
 		if b.BPB_NumFATs != 2:
-			yield "Uncommon BPB_NumFATs: 0x{0:02X}".format(b.BPB_NumFATs)
+			yield (_UNCOMMON, "Uncommon BPB_NumFATs: 0x{0:02X}".format(b.BPB_NumFATs))
 
 		if b.BPB_BytsPerSec > 0 and (b.BPB_RootEntCnt * 32) % b.BPB_BytsPerSec != 0:
-			yield "Invalid BPB_RootEntCnt: 0x{0:04X}".format(b.BPB_RootEntCnt)
+			yield (_INVALID, "Invalid BPB_RootEntCnt: 0x{0:04X}".format(b.BPB_RootEntCnt))
 
 		if b.BPB_TotSec16 == 0 and b.BPB_TotSec32 == 0:
-			yield "Invalid sector count: Both BPB_TotSec16 and BPB_TotSec32 are zero"
+			yield (_INVALID, "Invalid sector count: Both BPB_TotSec16 and BPB_TotSec32 are zero")
 		elif b.BPB_TotSec16 != 0 and b.BPB_TotSec32 != 0:
-			yield "Invalid sector count: Both BPB_TotSec16 (0x{0:04X}) and BPB_TotSec32 (0x{0:08X}) are nonzero".format(b.BPB_TotSec16, b.BPB_TotSec32)
+			yield (_INVALID, "Invalid sector count: Both BPB_TotSec16 (0x{0:04X}) and BPB_TotSec32 (0x{0:08X}) are nonzero".format(b.BPB_TotSec16, b.BPB_TotSec32))
 
 		if b.BPB_Media not in _VALID_MEDIA_BYTE:
-			yield "Invalid BPB_Media: 0x{0:02X}".format(b.BPB_Media)
+			yield (_INVALID, "Invalid BPB_Media: 0x{0:02X}".format(b.BPB_Media))
 		# TODO: should equal the first byte of FAT
 
 		if b.BPB_FATSz16 == 0 and b32.BPB_FATSz32 == 0:
-			yield "Invalid FAT size: Both BPB_FATSz16 and BPB_FATSz32 are zero"
+			yield (_INVALID, "Invalid FAT size: Both BPB_FATSz16 and BPB_FATSz32 are zero")
 
 		if b.BPB_SecPerTrk != self._geometry.sectors:
-			yield "Sector per track mismatch (read=0x{0:04X}, geometry=0x{1:04X})".format(b.BPB_SecPerTrk, self._geometry.sectors)
+			yield (_UNCOMMON, "Sector per track mismatch (read=0x{0:04X}, geometry=0x{1:04X})".format(b.BPB_SecPerTrk, self._geometry.sectors))
 		if b.BPB_NumHeads != self._geometry.heads:
-			yield "Head count mismatch (read=0x{0:04X}, geometry=0x{1:04X})".format(b.BPB_NumHeads, self._geometry.heads)
+			yield (_UNCOMMON, "Head count mismatch (read=0x{0:04X}, geometry=0x{1:04X})".format(b.BPB_NumHeads, self._geometry.heads))
 
 		if self.fat_type == FATVolume.FAT32:
 			diag_iter = self._chkdsk32()
@@ -175,7 +187,7 @@ class FATVolume(object):
 		self._seek_sector(0, 510)
 		sig = self._read(2)
 		if sig != _FAT_SIG:
-			yield "No signature at byte 510: {0}".format(_hexdump(sig))
+			yield (_INVALID, "No signature at byte 0x1FE: {0}".format(_hexdump(sig)))
 
 
 	def _chkdsk16(self):
@@ -183,21 +195,21 @@ class FATVolume(object):
 		b16 = self._bpb16
 
 		if b.BPB_RsvdSecCnt != 1:
-			yield "Invalid BPB_RsvdSecCnt for {0}: 0x{1:04X}".format(self.fat_type, b.BPB_RsvdSecCnt)
+			yield (_INVALID, "Invalid BPB_RsvdSecCnt for {0}: 0x{1:04X}".format(self.fat_type, b.BPB_RsvdSecCnt))
 
 		if b.BPB_RootEntCnt not in (0x0E0, 0x200):
-			yield "Uncommon BPB_RootEntCnt for {0}: 0x{1:04X}".format(self.fat_type, b.BPB_RootEntCnt)
+			yield (_UNCOMMON, "Uncommon BPB_RootEntCnt for {0}: 0x{1:04X}".format(self.fat_type, b.BPB_RootEntCnt))
 
 		if b.BPB_FATSz16 == 0:
-			yield "Invalid FAT size for {0}: 0x{1:04X}".format(self.fat_type, b.BPB_FATSz16)
+			yield (_INVALID, "Invalid FAT size for {0}: 0x{1:04X}".format(self.fat_type, b.BPB_FATSz16))
 
 		if b16.BS_DrvNum == 0x00:
 			if b.BPB_Media != 0xF0:
-				yield "BS_DrvNum is floppy but BPB_Media is not removable"
+				yield (_UNCOMMON, "BS_DrvNum is floppy but BPB_Media is not removable")
 			if b.BPB_HiddSec != 0:
-				yield "Invalid BPB_HiddSec for non-partitioned media: 0x{0:04X}".format(b.BPB_HiddSec)
+				yield (_INVALID, "Invalid BPB_HiddSec for non-partitioned media: 0x{0:04X}".format(b.BPB_HiddSec))
 		elif b16.BS_DrvNum == 0x80 and b.BPB_Media == 0xF0:
-			yield "BS_DrvNum is fixed but BPB_Media is removable"
+			yield (_UNCOMMON, "BS_DrvNum is fixed but BPB_Media is removable")
 
 		for message in self._chkdsk_bpbx(b16):
 			yield message
@@ -208,34 +220,34 @@ class FATVolume(object):
 		b32 = self._bpb32
 
 		if b.BPB_RsvdSecCnt != 32:
-			yield "Uncommon BPB_RsvdSecCnt for {0}: 0x{1:04X}".format(self.fat_type, b.BPB_RsvdSecCnt)
+			yield (_UNCOMMON, "Uncommon BPB_RsvdSecCnt for {0}: 0x{1:04X}".format(self.fat_type, b.BPB_RsvdSecCnt))
 
 		if b.BPB_RootEntCnt != 0:
-			yield "Invalid BPB_RootEntCnt for {0}: 0x{1:04X}".format(self.fat_type, b.BPB_RootEntCnt)
+			yield (_INVALID, "Invalid BPB_RootEntCnt for {0}: 0x{1:04X}".format(self.fat_type, b.BPB_RootEntCnt))
 
 		if b.BPB_FATSz16 != 0:
-			yield "BPB_FATSz16 must be zero for {0}: 0x{1:04X}".format(self.fat_type, b.BPB_FATSz16)
+			yield (_INVALID, "BPB_FATSz16 must be zero for {0}: 0x{1:04X}".format(self.fat_type, b.BPB_FATSz16))
 
 		if b32.BPB_FATSz32 == 0:
-			yield "Invalid BPB_FATSz32 for {0}: 0x{1:08X}".format(self.fat_type, b32.BPB_FATSz32)
+			yield (_INVALID, "Invalid BPB_FATSz32 for {0}: 0x{1:08X}".format(self.fat_type, b32.BPB_FATSz32))
 
 		if (b32.BPB_ExtFlags & 0b1111111101110000) != 0:
-			yield "Reserved bits in BPB_ExtFlags are set: 0x{0:04X} ({0:016b})".format(b32.BPB_ExtFlags)
+			yield (_UNCOMMON, "Reserved bits in BPB_ExtFlags are set: 0x{0:04X} ({0:016b})".format(b32.BPB_ExtFlags))
 
 		if b32.BPB_FSVer != 0:
-			yield "Unsupported BPB_FSVer: 0x{0:04X}".format(b32.BPB_FSVer)
+			yield (_INVALID, "Unsupported BPB_FSVer: 0x{0:04X}".format(b32.BPB_FSVer))
 
 		if b32.BPB_RootClus != 2:
-			yield "Uncommon BPB_RootClus: 0x{0:08X}".format(b32.BPB_RootClus)
+			yield (_UNCOMMON, "Uncommon BPB_RootClus: 0x{0:08X}".format(b32.BPB_RootClus))
 
 		if b32.BPB_FSInfo != 1:
-			yield "Uncommon BPB_FSInfo: 0x{0:08X}".format(b32.BPB_FSInfo)
+			yield (_UNCOMMON, "Uncommon BPB_FSInfo: 0x{0:08X}".format(b32.BPB_FSInfo))
 
 		if b32.BPB_BkBootSec != 6:
-			yield "Uncommon BPB_BkBootSec: 0x{0:08X}".format(b32.BPB_BkBootSec)
+			yield (_UNCOMMON, "Uncommon BPB_BkBootSec: 0x{0:08X}".format(b32.BPB_BkBootSec))
 
 		if b32.BPB_Reserved != '\0' * 12:
-			yield "Non-zero bytes in BPB_Reserved: {0!r}".format(_hexdump(b32.BPB_Reserved))
+			yield (_UNCOMMON, "Non-zero bytes in BPB_Reserved: {0!r}".format(_hexdump(b32.BPB_Reserved)))
 
 		for message in self._chkdsk_bpbx(b32):
 			yield message
@@ -243,13 +255,13 @@ class FATVolume(object):
 
 	def _chkdsk_bpbx(self, bx):
 		if bx.BS_DrvNum not in _VALID_DRIVE_NUM:
-			yield "Invalid BS_DrvNum: 0x{0:02X}".format(bx.BS_DrvNum)
+			yield (_INVALID, "Invalid BS_DrvNum: 0x{0:02X}".format(bx.BS_DrvNum))
 
 		if bx.BS_Reserved1 != 0:
-			yield "Nonzero BS_Reserved1: 0x{0:02X}".format(bx.BS_Reserved1)
+			yield (_UNCOMMON, "Nonzero BS_Reserved1: 0x{0:02X}".format(bx.BS_Reserved1))
 
 		if bx.BS_BootSig != 0x29:
-			yield "BS_VolID, BS_VolLab, BS_FilSysType not present"
+			yield (_INFO, "BS_VolID, BS_VolLab, BS_FilSysType not present")
 			return
 
 		# TODO: check bx.BS_VolLab against what the root dir thinks it is
@@ -265,7 +277,7 @@ class FATVolume(object):
 			fstype_ok = bx.BS_FilSysType == "FAT12   "
 
 		if not fstype_ok:
-			yield "BS_FilSysType doesn't match determined filesystem type of {0}: {1!r}".format(self.fat_type, bx.BS_FilSysType)
+			yield (_UNCOMMON, "BS_FilSysType doesn't match determined filesystem type of {0}: {1!r}".format(self.fat_type, bx.BS_FilSysType))
 
 
 	def _seek_sector(self, sector, byte=0):
