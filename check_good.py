@@ -14,6 +14,13 @@ import sys
 import disklib.validity
 
 
+# status dingbats
+CHAR_NO_MAJORITY = "X"
+CHAR_NOT_UNANIMOUS = "x"
+SINGLE_SOURCE = "1"
+NO_SOURCE = "-"
+
+
 def compare_span(start, expected_size, buffers, indices):
 	indexed_buffers = [ (i, buffers[i]) for i in indices ]
 	for char_index in xrange(expected_size):
@@ -37,10 +44,10 @@ def compare_span(start, expected_size, buffers, indices):
 			# than the next
 			if len(by_votes[0][1]) > len(by_votes[1][1]):
 				# there is, but it wasn't unanimous
-				statchar = "~"
+				statchar = CHAR_NOT_UNANIMOUS
 			else:
-				# nobody knows. mark with an x
-				statchar = "x"
+				# nobody knows. mark with a ?
+				statchar = CHAR_NO_MAJORITY
 
 			print "{0} 0x{1:08X}".format(statchar, start + char_index),
 			for char, indexset in by_votes:
@@ -82,11 +89,11 @@ def check_good(streams_and_validity):
 
 			if max(len(b) for b in buffers) > 0:
 				if len(currently_good_indices) == 0:
-					print "- 0x{0:08X}-0x{1:08X}".format(
+					print NO_SOURCE + " 0x{0:08X}-0x{1:08X}".format(
 						current_offset, next_offset)
 
 				elif len(currently_good_indices) == 1:
-					print "1 0x{0:08X}-0x{1:08X} ({2})".format(
+					print SINGLE_SOURCE + " 0x{0:08X}-0x{1:08X} ({2})".format(
 						current_offset, next_offset, list(currently_good_indices)[0])
 
 				else:
