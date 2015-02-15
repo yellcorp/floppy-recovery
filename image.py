@@ -54,7 +54,10 @@ def append_pixels(in_stream, count, out_bytearray, byte_to_pixel_function, void_
 	while bytes_read < count:
 		b = in_stream.read(count - bytes_read)
 		if len(b) == 0:
-			out_bytearray.extend(itertools.repeat(void_pixel, count - bytes_read))
+			out_bytearray.extend(
+				itertools.chain(
+					*itertools.repeat(void_pixel, count - bytes_read))
+				)
 			return
 		else:
 			out_bytearray.extend(
@@ -83,9 +86,12 @@ def render_graphic(in_path, width, out_path):
 
 	height, remainder = divmod(ranges.domain, width)
 
-	# partial_row = ranges.domain % width
 	if remainder != 0:
-		graphic_buffer.extend(itertools.repeat((0, 0, 0, 0), width - remainder))
+		graphic_buffer.extend(
+			itertools.chain(
+				*itertools.repeat((0, 0, 0, 0), width - remainder)
+			)
+		)
 		height += 1
 
 	graphic = PIL.Image.frombuffer(
