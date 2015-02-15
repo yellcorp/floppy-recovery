@@ -126,6 +126,9 @@ def read_winimage_pasted(image_size, log_line_iter):
 		(_parse_winimage_error(geometry, line) for line in log_line_iter)
 	))
 
+	if image_size < expected_size:
+		bad_ranges.append((image_size, expected_size))
+
 	return ValidityRanges(expected_size, bad_ranges, invert=True)
 
 
@@ -144,6 +147,9 @@ def read_winimage_scripted(image_size, log_line_iter):
 			bad_range = _parse_winimage_error(geometry, dialog_line)
 			if bad_range is not None:
 				bad_ranges.append(bad_range)
+
+	if image_size < expected_size:
+		bad_ranges.append((image_size, expected_size))
 
 	return ValidityRanges(expected_size, bad_ranges, invert=True)
 
