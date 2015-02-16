@@ -475,12 +475,21 @@ class FATVolume(object):
 		else:
 			raise SeekError("Invalid sector number", sector)
 
+	def _seek_cluster(self, cluster):
+		if cluster < _MIN_CLUSTER_NUM:
+			raise SeekError("Invalid cluster number", cluster)
+		self._seek_sector(self._first_sector_of_cluster(cluster))
+
 	def _read(self, byte_count):
 		return self._stream.read(byte_count)
 
 	def _read_sector(self, sector):
 		self._seek_sector(sector)
 		return self._read(self._bytes_per_sector)
+
+	def _read_cluster(self, cluster):
+		self._seek_cluster(cluster)
+		return self._read(self._bytes_per_sector * self._bpb.BPB_SecPerClus)
 
 	def _read_bpb(self):
 		self._seek_sector(0)
@@ -594,6 +603,12 @@ class FATVolume(object):
 
 		# even-numbered clusters are stored in the low 12
 		return entry & 0x0FFF
+
+	def _is_eoc(self, entry):
+		return entry >= self._fat_eoc
+
+	def _is_bad(self, entry):
+		return entry == self._fat_bad
 
 	def _load_fat(self, sectorn):
 		if sectorn == self._fat_buffer_sector:
