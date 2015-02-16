@@ -170,7 +170,7 @@ class FATVolume(object):
 			yield (_UNCOMMON, "Uncommon BPB_NumFATs: 0x{0:02X}".format(b.BPB_NumFATs))
 
 		if b.BPB_BytsPerSec > 0 and (b.BPB_RootEntCnt * 32) % b.BPB_BytsPerSec != 0:
-			yield (_INVALID, "Invalid BPB_RootEntCnt: 0x{0:04X}".format(b.BPB_RootEntCnt))
+			yield (_INVALID, "BPB_RootEntCnt of 0x{0:04X} does not fill sectors evenly".format(b.BPB_RootEntCnt))
 
 		if b.BPB_TotSec16 == 0 and b.BPB_TotSec32 == 0:
 			yield (_INVALID, "Invalid sector count: Both BPB_TotSec16 and BPB_TotSec32 are zero")
