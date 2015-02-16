@@ -128,7 +128,7 @@ class FATVolume(object):
 		self._bpb32 = None
 
 		self._root_dir_sector_count = -1
-		self._fat_size = -1
+		self._fat_sector_count = -1
 		self._total_sector_count = -1
 		self._first_data_sector = -1
 		self._data_sector_count = -1
@@ -312,7 +312,7 @@ class FATVolume(object):
 		self._bpb32 = BiosParameterBlock32(bpbx_union[:BiosParameterBlock32.size()])
 
 		self._root_dir_sector_count = self._calc_root_dir_sector_count()
-		self._fat_size = self._calc_fat_size()
+		self._fat_sector_count = self._calc_fat_sector_count()
 		self._total_sector_count = self._calc_total_sector_count()
 		self._first_data_sector = self._calc_first_data_sector()
 		self._data_sector_count = self._calc_data_sector_count()
@@ -336,7 +336,7 @@ class FATVolume(object):
 		bytes = (b.BPB_RootEntCnt * 32) + (b.BPB_BytsPerSec - 1)
 		return int(math.ceil(float(bytes) / b.BPB_BytsPerSec))
 
-	def _calc_fat_size(self): # in sectors
+	def _calc_fat_sector_count(self):
 		if self._bpb.BPB_FATSz16 != 0:
 			return self._bpb.BPB_FATSz16
 		return self._bpb32.BPB_FATSz32
@@ -349,7 +349,7 @@ class FATVolume(object):
 	def _calc_first_data_sector(self):
 		b = self._bpb
 		return (
-			b.BPB_RsvdSecCnt + b.BPB_NumFATs * self._fat_size +
+			b.BPB_RsvdSecCnt + b.BPB_NumFATs * self._fat_sector_count +
 			self._root_dir_sector_count
 		)
 
