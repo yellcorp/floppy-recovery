@@ -5,6 +5,14 @@ import re
 from utils.NamedStruct import NamedStruct
 
 
+class MediaError(Exception):
+	pass
+
+
+class SeekError(MediaError):
+	pass
+
+
 _COMMON_JMPBOOT = re.compile(r"^(?:\xEB.\x90|\xE9..)$")
 _VALID_BYTES_PER_SECTOR = tuple(1 << n for n in xrange(9, 13))
 _VALID_SECTORS_PER_CLUSTER = tuple(1 << n for n in xrange(0, 8))
@@ -297,7 +305,10 @@ class FATVolume(object):
 
 
 	def _seek_sector(self, sector, byte=0):
-		self._stream.seek(sector * self._geometry.sector_size + byte)
+		if 0 <= sector < self._geometry.total_sector_count():
+			self._stream.seek(sector * self._geometry.sector_size + byte)
+		else:
+			raise SeekError("Invalid sector number", sector)
 
 	def _read(self, byte_count):
 		return self._stream.read(byte_count)
