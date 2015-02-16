@@ -162,8 +162,6 @@ class FATVolume(object):
 
 		if b.BPB_TotSec16 == 0 and b.BPB_TotSec32 == 0:
 			yield (_INVALID, "Invalid sector count: Both BPB_TotSec16 and BPB_TotSec32 are zero")
-		elif b.BPB_TotSec16 != 0 and b.BPB_TotSec32 != 0:
-			yield (_INVALID, "Invalid sector count: Both BPB_TotSec16 (0x{0:04X}) and BPB_TotSec32 (0x{1:08X}) are nonzero".format(b.BPB_TotSec16, b.BPB_TotSec32))
 
 		if self._total_sector_count != self._geometry.total_sector_count():
 			expect = self._geometry.total_sector_count()
