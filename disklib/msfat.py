@@ -1,5 +1,6 @@
 import math
 import re
+import struct
 
 
 from utils.NamedStruct import NamedStruct
@@ -20,6 +21,10 @@ _VALID_MEDIA_BYTE = (0xF0,) + tuple(xrange(0xF8, 0x100))
 _VALID_DRIVE_NUM = (0x00, 0x80)
 _FAT_TYPE_CLUSTER_COUNT_CUTOVERS = (4085, 65525)
 _FAT_SIG = "\x55\xAA"
+_FAT32_ENTRY_MASK = 0x0FFFFFFF
+_FAT12_EOC = 0xFF8
+_FAT12_BAD = 0xFF7
+_MIN_CLUSTER_NUM = 2
 
 class BiosParameterBlock(NamedStruct):
 	endian = "little"
@@ -139,6 +144,9 @@ class FATVolume(object):
 		# maybe use what we read from the boot sector.
 		self._bytes_per_sector = 0
 
+		# some way of changing this
+		self.active_fat_index = 0
+
 		self._root_dir_sector_count = -1
 		self._fat_sector_count = -1
 		self._total_sector_count = -1
@@ -146,6 +154,9 @@ class FATVolume(object):
 		self._data_sector_count = -1
 		self._cluster_count = -1
 		self.fat_type = None
+
+		self._fat_buffer = None
+		self._fat_buffer_sector = -1
 
 		self._read_bpb()
 
@@ -340,6 +351,10 @@ class FATVolume(object):
 	def _read(self, byte_count):
 		return self._stream.read(byte_count)
 
+	def _read_sector(self, sector):
+		self._seek_sector(sector)
+		return self._read(self._bytes_per_sector)
+
 	def _read_bpb(self):
 		self._seek_sector(0)
 
@@ -368,8 +383,19 @@ class FATVolume(object):
 		self._cluster_count = 0
 		if self._bpb.BPB_SecPerClus > 0:
 			self._cluster_count = self._data_sector_count / self._bpb.BPB_SecPerClus
+		self._max_cluster_num = self._cluster_count + 1
 
 		self.fat_type = self._determine_fat_type()
+
+		if self.fat_type == FATVolume.FAT32:
+			extrabits = 0xFFFF000
+		elif self.fat_type == FATVolume.FAT16:
+			extrabits = 0xF000
+		else:
+			extrabits = 0
+
+		self._fat_eoc = _FAT12_EOC | extrabits
+		self._fat_bad = _FAT12_BAD | extrabits
 
 	def _calc_root_dir_sector_count(self):
 		b = self._bpb
@@ -404,6 +430,51 @@ class FATVolume(object):
 
 	def _first_sector_of_cluster(self, n):
 		return (n - 2) * self._bpb.BPB_SecPerClus + self._first_data_sector
+
+	def _first_fat_sector(self):
+		return self._bpb.BPB_RsvdSecCnt + self._fat_sector_count * self.active_fat_index
+
+	def _get_fat_offset(self, clustern):
+		if self.fat_type == FATVolume.FAT32:
+			offset = clustern * 4
+		elif self.fat_type == FATVolume.FAT16:
+			offset = clustern * 2
+		else:
+			offset = clustern + (clustern >> 1) # integer mul by 1.5, rounding down
+
+		return divmod(offset, self._bytes_per_sector)
+
+	def _get_fat_address(self, clustern):
+		sec_offset, byte_offset = self._get_fat_offset(clustern)
+		return (sec_offset + self._first_fat_sector(), byte_offset)
+
+	def _get_fat_entry(self, clustern):
+		sec_num, sec_offset = self._get_fat_address(clustern)
+		self._load_fat(sec_num)
+
+		if self.fat_type == FATVolume.FAT32:
+			entry_bytes = self._fat_buffer[sec_offset : sec_offset + 4]
+			return struct.unpack("I", entry_bytes)[0] & _FAT32_ENTRY_MASK
+
+		entry_bytes = self._fat_buffer[sec_offset : sec_offset + 2]
+		entry = struct.unpack("H", entry_bytes)[0]
+		if self.fat_type == FATVolume.FAT16:
+			return entry
+
+		# FAT12 case
+		if clustern & 1:
+			# odd-numbered clusters are stored in the high 12 bits of the 16 bit value
+			return entry >> 4
+
+		# even-numbered clusters are stored in the low 12
+		return entry & 0x0FFF
+
+	def _load_fat(self, sectorn):
+		if sectorn == self._fat_buffer_sector:
+			return
+		self._fat_buffer_sector = sectorn
+		self._seek_sector(sectorn)
+		self._fat_buffer = self._read(self._bytes_per_sector * 2)
 
 	def _determine_fat_type(self):
 		if self._cluster_count < 4085:
