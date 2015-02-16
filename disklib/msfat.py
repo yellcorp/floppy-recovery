@@ -479,10 +479,9 @@ class FATVolume(object):
 
 		self._bpb = BiosParameterBlock.from_stream(self._stream)
 
-		# TODO: at the moment we're using the value from the boot sector
-		# but we should probably take this from self._geometry instead if
-		# we'll be dealing with bad boot sectors
-		self._bytes_per_sector = self._bpb.BPB_BytsPerSec
+		# you could use self._bpb.BPB_BytsPerSec
+		# self._bytes_per_sector = self._bpb.BPB_BytsPerSec
+		self._bytes_per_sector = self._geometry.sector_size
 
 		bpbx_union = self._read(max(
 			BiosParameterBlock16.size(), BiosParameterBlock32.size()))
