@@ -163,6 +163,9 @@ class FATVolume(object):
 		if b.BPB_BytsPerSec not in _VALID_BYTES_PER_SECTOR:
 			yield (_INVALID, "Invalid BPB_BytsPerSec: 0x{0:04X}".format(b.BPB_BytsPerSec))
 
+		if b.BPB_BytsPerSec != self._geometry.sector_size:
+			yield (_INVALID, "Bytes per sector mismatch (read=0x{0:04X}, geometry=0x{1:04X})".format(b.BPB_BytsPerSec, self._geometry.sector_size))
+
 		if b.BPB_SecPerClus not in _VALID_SECTORS_PER_CLUSTER:
 			yield (_INVALID, "Invalid BPB_SecPerClus: 0x{0:02X}".format(b.BPB_SecPerClus))
 
@@ -171,6 +174,9 @@ class FATVolume(object):
 
 		if b.BPB_BytsPerSec > 0 and (b.BPB_RootEntCnt * 32) % b.BPB_BytsPerSec != 0:
 			yield (_INVALID, "BPB_RootEntCnt of 0x{0:04X} does not fill sectors evenly".format(b.BPB_RootEntCnt))
+
+		if self._root_dir_sector_count > self._total_sector_count:
+			yield (_INVALID, "BPB_RootEntCnt of 0x{0:04X} exceeds volume sector count ({0:04X} sectors > {1:04X} sectors)".format(self._root_dir_sector_count, self._total_sector_count))
 
 		if b.BPB_TotSec16 == 0 and b.BPB_TotSec32 == 0:
 			yield (_INVALID, "Invalid sector count: Both BPB_TotSec16 and BPB_TotSec32 are zero")
@@ -193,6 +199,24 @@ class FATVolume(object):
 
 		if b.BPB_FATSz16 == 0 and b32.BPB_FATSz32 == 0:
 			yield (_INVALID, "Invalid FAT size: Both BPB_FATSz16 and BPB_FATSz32 are zero")
+
+		if self._fat_sector_count > self._total_sector_count:
+			yield (_INVALID, "Single FAT sector count exceeds volume sector count ({0:04X} > {1:04X})".format(self._fat_sector_count, self._total_sector_count))
+		elif b.BPB_NumFATs * self._fat_sector_count > self._total_sector_count:
+			yield (
+				_INVALID,
+				"{0} copies of FAT exceeds volume sector count ({1:04X} > {2:04X})".format(
+					b.BPB_NumFATs,
+					b.BPB_NumFATs * self._fat_sector_count,
+					self._total_sector_count
+				)
+			)
+
+		if b.BPB_RsvdSecCnt > self._total_sector_count:
+			yield (_INVALID, "BPB_RsvdSecCnt exceeds volume sector count ({0:04X} > {1:04X})".format(b.BPB_RsvdSecCnt, self._total_sector_count))
+
+		if self._first_data_sector >= self._total_sector_count:
+			yield (_INVALID, "Data area begins beyond volume capacity ({0:04X} >= {1:04X})".format(self._first_data_sector, self._total_sector_count))
 
 		if b.BPB_SecPerTrk != self._geometry.sectors:
 			yield (_UNCOMMON, "Sector per track mismatch (read=0x{0:04X}, geometry=0x{1:04X})".format(b.BPB_SecPerTrk, self._geometry.sectors))
@@ -271,6 +295,9 @@ class FATVolume(object):
 
 		if b32.BPB_Reserved != '\0' * 12:
 			yield (_UNCOMMON, "Non-zero bytes in BPB_Reserved: {0!r}".format(_hexdump(b32.BPB_Reserved)))
+
+		if self._cluster_count > _FAT32_MAX_ALLOWED_CLUSTER_COUNT:
+			yield (_INVALID, "Cluster count exceeds maximum allowed for {0}: 0x{1:08X} > 0x{2:08X}".format(self.fat_type, self._cluster_count, _FAT32_MAX_ALLOWED_CLUSTER_COUNT))
 
 		for message in self._chkdsk_bpbx(b32):
 			yield message
