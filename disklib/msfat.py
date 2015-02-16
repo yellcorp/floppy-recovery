@@ -26,6 +26,11 @@ _FAT12_EOC = 0xFF8
 _FAT12_BAD = 0xFF7
 _MIN_CLUSTER_NUM = 2
 
+# fat32 can't have clusters whose number >= the fat32 bad cluster marker.
+# the max cluster number is 0x0FFFFFF6. when compensating for the lowest
+# cluster num being 2, the max COUNT is 0x0FFFFFF5
+_FAT32_MAX_ALLOWED_CLUSTER_COUNT = 0x0FFFFFF5
+
 class BiosParameterBlock(NamedStruct):
 	endian = "little"
 	fields = [
@@ -247,6 +252,28 @@ class FATVolume(object):
 		if sig != _FAT_SIG:
 			yield (_INVALID, "No signature at byte 0x1FE: {0} (should be {1})".format(_hexdump(sig), _hexdump(_FAT_SIG)))
 
+		# checking it this way is an easier way of accounting for the chance
+		# of the last FAT12 entry running into the next sector. i don't know
+		# if this ever happens
+		max_fat_sector, max_fat_byte = self._get_fat_offset(self._max_cluster_num + 1)
+		required_sectors = max_fat_sector
+		if max_fat_byte != 0:
+			required_sectors += 1
+
+		if self._cluster_count > 0: # Don't do this check for garbaged cluster counts
+			if self._fat_sector_count > required_sectors:
+				yield (
+					_UNCOMMON,
+					"FAT(s) occupy more sectors ({0}) than necessary. The minimum required for {1} clusters is {2}.".format(
+						self._fat_sector_count,
+						self._cluster_count,
+						required_sectors
+					)
+				)
+
+		for message in self._chkdsk_fat():
+			yield message
+
 
 	def _chkdsk16(self):
 		b = self._bpb
@@ -340,6 +367,98 @@ class FATVolume(object):
 
 		if not fstype_ok:
 			yield (_bs_level, "BS_FilSysType doesn't match determined filesystem type of {0}: {1!r}".format(self.fat_type, bx.BS_FilSysType))
+
+
+	def _chkdsk_fat(self):
+		b = self._bpb
+		prev_active_fat = self.active_fat_index
+		
+		for fat_index in xrange(b.BPB_NumFATs):
+			self.active_fat_index = fat_index
+			if self._first_fat_sector() >= self._geometry.total_sector_count():
+				yield (_INVALID, "Canceling FAT check at FAT[{0}]: First sector of this FAT exceeds volume sector count".format(fat_index))
+				break
+
+			try:
+				for message in self._chkdsk_lowfat():
+					yield message
+
+				for message in self._chkdsk_highfat():
+					yield message
+
+			except MediaError as me:
+				yield (_INVALID, "Error while checking FAT[{0}]: {1!s}".format(fat_index, me))
+
+		self.active_fat_index = prev_active_fat
+
+
+	def _chkdsk_lowfat(self):
+		b = self._bpb
+		expect_fat0 = 0x0F00 | b.BPB_Media
+
+		fat1_check_mask = 0x0FFF
+		fat1_clean = 0
+
+		if self.fat_type == FATVolume.FAT32:
+			fat1_check_mask = 0x03FFFFFF
+			fat1_clean =      0x08000000
+			fat1_harderror =  0x04000000
+
+		elif self.fat_type == FATVolume.FAT16:
+			fat1_check_mask = 0x3FFF
+			fat1_clean =      0x8000
+			fat1_harderror =  0x4000
+
+		actual_fat0 = self._get_fat_entry(0)
+		if actual_fat0 != expect_fat0:
+			yield (
+				_INVALID,
+				"FAT[{0}][0] doesn't match BPB_Media (0x{1:02X}). Expected 0x{2:04X}, got 0x{3:04X}".format(
+					self.active_fat_index,
+					b.BPB_Media,
+					expect_fat0,
+					actual_fat0
+				)
+			)
+
+		actual_fat1 = self._get_fat_entry(1)
+		if (actual_fat1 & fat1_check_mask) < (self._fat_eoc & fat1_check_mask):
+			yield (
+				_INVALID,
+				"FAT[{0}][1] low bits don't contain a valid EOC for {1}: Expected >= 0x{2:04X}, got 0x{3:04X}".format(
+					self.active_fat_index,
+					self.fat_type,
+					self._fat_eoc & fat1_check_mask,
+					actual_fat1 & fat1_check_mask
+				)
+			)
+
+		if fat1_clean:
+			if (actual_fat1 & fat1_clean) == 0:
+				yield (_INFO, "FAT[{0}] reports volume is marked as dirty".format(self.active_fat_index))
+			if (actual_fat1 & fat1_harderror) == 0:
+				yield (_INFO, "FAT[{0}] reports volume is marked as having hard errors".format(self.active_fat_index))
+
+
+	def _chkdsk_highfat(self):
+		nonzeroes = 0
+
+		start_sector, start_byte = self._get_fat_address(self._max_cluster_num + 1)
+
+		# this is the first invalid, not the last valid
+		# so feeding it to xrange is correct
+		end_sector = self._first_fat_sector() + self._fat_sector_count
+
+		for current_sector in xrange(start_sector, end_sector):
+			sec = self._read_sector(current_sector)
+			for b in xrange(start_byte, self._bytes_per_sector):
+				if sec[b] != '\0':
+					nonzeroes += 1
+
+			start_byte = 0
+
+		if nonzeroes > 0:
+			yield (_UNCOMMON, "FAT[{0}] has non-zero data in its unused area".format(self.active_fat_index))
 
 
 	def _seek_sector(self, sector, byte=0):
