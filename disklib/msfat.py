@@ -354,6 +354,8 @@ class FATVolume(object):
 			_bs_level = _INFO
 
 		# TODO: check bx.BS_VolLab against what the root dir thinks it is
+		yield (_INFO, "BS_VolID is 0x{0:08X}".format(bx.BS_VolID))
+		yield (_INFO, "BS_VolLab is {0!r}".format(bx.BS_VolLab))
 
 		fstype_ok = False
 		if self.fat_type == FATVolume.FAT32:
