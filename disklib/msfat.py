@@ -185,7 +185,9 @@ class FATVolume(object):
 		if b.BPB_SecPerClus not in _VALID_SECTORS_PER_CLUSTER:
 			yield (_INVALID, "Invalid BPB_SecPerClus: 0x{0:02X}".format(b.BPB_SecPerClus))
 
-		if b.BPB_NumFATs != 2:
+		if b.BPB_NumFATs == 0:
+			yield (_INVALID, "Invalid BPB_NumFATs: 0x{0:02X}".format(b.BPB_NumFATs))
+		elif b.BPB_NumFATs != 2:
 			yield (_UNCOMMON, "Uncommon BPB_NumFATs: 0x{0:02X}".format(b.BPB_NumFATs))
 
 		if b.BPB_BytsPerSec > 0 and (b.BPB_RootEntCnt * 32) % b.BPB_BytsPerSec != 0:
@@ -282,7 +284,9 @@ class FATVolume(object):
 		if b.BPB_RsvdSecCnt != 1:
 			yield (_INVALID, "Invalid BPB_RsvdSecCnt for {0}: 0x{1:04X}".format(self.fat_type, b.BPB_RsvdSecCnt))
 
-		if b.BPB_RootEntCnt not in (0x0E0, 0x200):
+		if b.BPB_RootEntCnt == 0:
+			yield (_INVALID, "Invalid BPB_RootEntCnt for {0}: 0x{1:04X}".format(self.fat_type, b.BPB_RootEntCnt))
+		elif b.BPB_RootEntCnt not in (0x0E0, 0x200):
 			yield (_UNCOMMON, "Uncommon BPB_RootEntCnt for {0}: 0x{1:04X}".format(self.fat_type, b.BPB_RootEntCnt))
 
 		if b.BPB_FATSz16 == 0:
@@ -304,6 +308,8 @@ class FATVolume(object):
 		b = self._bpb
 		b32 = self._bpb32
 
+		if b.BPB_RsvdSecCnt == 0:
+			yield (_INVALID, "Invalid BPB_RsvdSecCnt for {0}: 0x{1:04X}".format(self.fat_type, b.BPB_RsvdSecCnt))
 		if b.BPB_RsvdSecCnt != 32:
 			yield (_UNCOMMON, "Uncommon BPB_RsvdSecCnt for {0}: 0x{1:04X}".format(self.fat_type, b.BPB_RsvdSecCnt))
 
