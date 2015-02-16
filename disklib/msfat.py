@@ -273,9 +273,10 @@ class FATVolume(object):
 		if bx.BS_Reserved1 != 0:
 			yield (_UNCOMMON, "Nonzero BS_Reserved1: 0x{0:02X}".format(bx.BS_Reserved1))
 
+		_bs_level = _UNCOMMON
 		if bx.BS_BootSig != 0x29:
 			yield (_INFO, "BS_VolID, BS_VolLab, BS_FilSysType not present")
-			return
+			_bs_level = _INFO
 
 		# TODO: check bx.BS_VolLab against what the root dir thinks it is
 
@@ -290,7 +291,7 @@ class FATVolume(object):
 			fstype_ok = bx.BS_FilSysType == "FAT12   "
 
 		if not fstype_ok:
-			yield (_UNCOMMON, "BS_FilSysType doesn't match determined filesystem type of {0}: {1!r}".format(self.fat_type, bx.BS_FilSysType))
+			yield (_bs_level, "BS_FilSysType doesn't match determined filesystem type of {0}: {1!r}".format(self.fat_type, bx.BS_FilSysType))
 
 
 	def _seek_sector(self, sector, byte=0):
