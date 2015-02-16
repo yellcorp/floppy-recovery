@@ -127,6 +127,10 @@ class FATVolume(object):
 		self._bpb16 = None
 		self._bpb32 = None
 
+		# mirror the value we want to use in here. maybe take it from geometry,
+		# maybe use what we read from the boot sector.
+		self._bytes_per_sector = 0
+
 		self._root_dir_sector_count = -1
 		self._fat_sector_count = -1
 		self._total_sector_count = -1
@@ -303,6 +307,11 @@ class FATVolume(object):
 
 		self._bpb = BiosParameterBlock.from_stream(self._stream)
 
+		# TODO: at the moment we're using the value from the boot sector
+		# but we should probably take this from self._geometry instead if
+		# we'll be dealing with bad boot sectors
+		self._bytes_per_sector = self._bpb.BPB_BytsPerSec
+
 		bpbx_union = self._read(max(
 			BiosParameterBlock16.size(), BiosParameterBlock32.size()))
 
@@ -311,7 +320,10 @@ class FATVolume(object):
 
 		self._root_dir_sector_count = self._calc_root_dir_sector_count()
 		self._fat_sector_count = self._calc_fat_sector_count()
+
+		# may want to use geometry here too
 		self._total_sector_count = self._calc_total_sector_count()
+
 		self._first_data_sector = self._calc_first_data_sector()
 		self._data_sector_count = self._calc_data_sector_count()
 
@@ -329,10 +341,8 @@ class FATVolume(object):
 		if b.BPB_RootEntCnt == 0:
 			return 0
 
-		# TODO: to aid data recovery, should probably use bytes per sector
-		# from self._geometry rather than what we read from the boot sector
-		bytes = (b.BPB_RootEntCnt * 32) + (b.BPB_BytsPerSec - 1)
-		return int(math.ceil(float(bytes) / b.BPB_BytsPerSec))
+		bytes = (b.BPB_RootEntCnt * 32) + (self._bytes_per_sector - 1)
+		return int(math.ceil(float(bytes) / self._bytes_per_sector))
 
 	def _calc_fat_sector_count(self):
 		if self._bpb.BPB_FATSz16 != 0:
