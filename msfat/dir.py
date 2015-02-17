@@ -131,23 +131,22 @@ def _assemble_long_entries(long_entries):
 
 	count = 0
 
-	# max length of an LFN is 255. each entry can store 13 characters, so use
-	# a buffer of 255 rounded up to the next multiple of 13
-	buf = bytearray(260)
+	# max length of an LFN is 255 U16s. each entry can store 13 UCS2 chars, so
+	# use a buffer of 510 rounded up to the next multiple of 26
+	buf = bytearray(520)
 	for e in long_entries:
 		order = e.LDIR_Ord & _LONG_ENTRY_ORD_MASK
-		base = order * 13
-		buf[base : base + 5] = e.LDIR_Name1
-		buf[base + 5 : base + 11] = e.LDIR_Name2
-		buf[base + 11 : base + 13] = e.LDIR_Name3
+		base = (order - 1) * 26
+		buf[base : base + 10] = e.LDIR_Name1
+		buf[base + 10 : base + 22] = e.LDIR_Name2
+		buf[base + 22 : base + 26] = e.LDIR_Name3
 		count += 1
 
 	if count == 0:
 		return None
 
-	# if there were any missing entries, that block of 13 chars will be
-	# \0s in the middle of the string
-	return buf.decode("utf_16_le").rstrip(u"\0")
+	name = buf.decode("utf_16_le")
+	return name[:name.find(u"\0")]
 
 class FATDirEntry(object):
 	def __init__(self, short_entry, long_entries=None):
