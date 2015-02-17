@@ -9,6 +9,9 @@ from msfat import ATTR_READ_ONLY, ATTR_HIDDEN, ATTR_SYSTEM, ATTR_VOLUME_ID, \
 	ATTR_RESERVED_MASK
 
 
+_LAST_MARKER = "\x00"
+_FREE_MARKER = "\xE5"
+
 _THISDIR_NAME = ".          "
 _UPDIR_NAME =   "..         "
 
@@ -112,6 +115,15 @@ class FATLongDirEntryStruct(NamedStruct):
 		("H",   "LDIR_FstClusLO"), # Must be 0 for non LFN-aware disk utils
 		("4s",  "LDIR_Name3")      # UCS2 chars 12-13 of this segment
 	]
+
+def _buffer_is_long_entry(buf):
+	return (ord(buf[11]) & ATTR_LONG_NAME_MASK) == ATTR_LONG_NAME
+
+def _buffer_is_free(buf):
+	return buf[0] == _FREE_MARKER
+
+def _buffer_is_last(buf):
+	return buf[0] == _LAST_MARKER
 
 def _assemble_long_entries(long_entries):
 	if long_entries is None:
