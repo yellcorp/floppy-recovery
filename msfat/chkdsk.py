@@ -77,7 +77,6 @@ def chkdsk(volume):
 
 	if b.BPB_Media not in _VALID_MEDIA_BYTE:
 		yield (_INVALID, "Invalid BPB_Media: 0x{0:02X}".format(b.BPB_Media))
-	# TODO: should equal the first byte of FAT
 
 	if b.BPB_FATSz16 == 0 and b32.BPB_FATSz32 == 0:
 		yield (_INVALID, "Invalid FAT size: Both BPB_FATSz16 and BPB_FATSz32 are zero")
