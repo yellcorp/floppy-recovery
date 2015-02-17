@@ -497,6 +497,13 @@ class FATVolume(object):
 		self._determine_fat_type()
 
 
+	def _open_root_dir(self):
+		if self.fat_type == FATVolume.FAT32:
+			return self._open_cluster_chain(self._bpb32.BPB_RootClus)
+		else:
+			return self._open_sector_run(self._root_dir_sector_start, self._root_dir_sector_count)
+
+
 	def _open_sector_run(self, first_sector, count):
 		return _SectorRunStream(self, first_sector, count)
 
