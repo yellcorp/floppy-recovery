@@ -169,22 +169,22 @@ class FATDirEntry(object):
 		return self.short_entry.DIR_Name[0] == "\x00"
 
 	def is_read_only(self):
-		return self.short_entry.DIR_Attr & ATTR_READ_ONLY
+		return self.short_entry.DIR_Attr & ATTR_READ_ONLY != 0
 
 	def is_hidden(self):
-		return self.short_entry.DIR_Attr & ATTR_HIDDEN
+		return self.short_entry.DIR_Attr & ATTR_HIDDEN != 0
 
 	def is_system(self):
-		return self.short_entry.DIR_Attr & ATTR_SYSTEM
+		return self.short_entry.DIR_Attr & ATTR_SYSTEM != 0
 
 	def is_volume_id(self):
-		return self.short_entry.DIR_Attr & ATTR_VOLUME_ID
+		return self.short_entry.DIR_Attr & ATTR_VOLUME_ID != 0
 
 	def is_directory(self):
-		return self.short_entry.DIR_Attr & ATTR_DIRECTORY
+		return self.short_entry.DIR_Attr & ATTR_DIRECTORY != 0
 
 	def is_archive(self):
-		return self.short_entry.DIR_Attr & ATTR_ARCHIVE
+		return self.short_entry.DIR_Attr & ATTR_ARCHIVE != 0
 
 	def create_time(self, timezone=None):
 		return fat_time_to_unix(
