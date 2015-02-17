@@ -125,38 +125,18 @@ def _buffer_is_free(buf):
 def _buffer_is_last(buf):
 	return buf[0] == _LAST_MARKER
 
-# TODO: may be preferable to do this all in the directory read function? There
-# are still other things to check, like the final LFN segment being null
-# terminated if shorter than 13 chars and padded with 0xFF if shorter than 12
-# chars
 def _assemble_long_entries(long_entries):
-	if long_entries is None:
-		return None
-
-	count = 0
-
-	# max length of an LFN is 255 U16s. each entry can store 13 UCS2 chars, so
-	# use a buffer of 510 rounded up to the next multiple of 26
-	buf = bytearray(520)
-	for e in long_entries:
-		order = e.LDIR_Ord & _LONG_ENTRY_ORD_MASK
-		base = (order - 1) * 26
-		buf[base : base + 10] = e.LDIR_Name1
-		buf[base + 10 : base + 22] = e.LDIR_Name2
-		buf[base + 22 : base + 26] = e.LDIR_Name3
-		count += 1
-
-	if count == 0:
-		return None
-
-	name = buf.decode("utf_16_le")
+	buf = "".join(
+		e.LDIR_Name1 + e.LDIR_Name2 + e.LDIR_Name3
+		for e in reversed(long_entries)
+	)
+	name = buf.decode("utf_16_le", "replace") + u"\0"
 	return name[:name.find(u"\0")]
 
 class FATDirEntry(object):
-	def __init__(self, short_entry, long_entries=None):
+	def __init__(self, short_entry, long_name=None):
 		self.short_entry = short_entry
-		self.long_entries = long_entries
-		self.long_name = _assemble_long_entries(long_entries)
+		self.long_name = long_name
 
 	def name(self):
 		if self.long_name is None:
@@ -278,6 +258,7 @@ def read_dir(stream):
 					long_entries = [ ]
 		else:
 			entry = FATShortDirEntryStruct(bytes)
+			long_name = None
 			# we should have hit long entry 1 (they're 1-based to prevent 0s
 			# in the first byte)
 			if (
@@ -285,7 +266,7 @@ def read_dir(stream):
 				(long_entries[-1].LDIR_Ord & _LONG_ENTRY_ORD_MASK) == 1 and
 				long_entries[-1].LDIR_Chksum == short_name_checksum(entry.DIR_Name)
 			):
-				yield FATDirEntry(entry, long_entries)
-			else:
-				yield FATDirEntry(entry)
+				long_name = _assemble_long_entries(long_entries)
+
+			yield FATDirEntry(entry, long_name)
 			long_entries = [ ]
