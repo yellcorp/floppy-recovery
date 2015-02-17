@@ -125,6 +125,10 @@ def _buffer_is_free(buf):
 def _buffer_is_last(buf):
 	return buf[0] == _LAST_MARKER
 
+# TODO: may be preferable to do this all in the directory read function? There
+# are still other things to check, like the final LFN segment being null
+# terminated if shorter than 13 chars and padded with 0xFF if shorter than 12
+# chars
 def _assemble_long_entries(long_entries):
 	if long_entries is None:
 		return None
@@ -240,3 +244,48 @@ class FATDirEntry(object):
 			self.attr_string(),
 			self.file_size()
 		)
+
+
+def read_dir(stream):
+	long_entries = [ ]
+	while True:
+		bytes = stream.read(32)
+		if len(bytes) == 0:
+			# this is unexpected if we're not intentionally reading beyond end
+			break
+		elif _buffer_is_last(bytes):
+			break
+		elif _buffer_is_free(bytes):
+			continue
+		elif _buffer_is_long_entry(bytes):
+			entry = FATLongDirEntryStruct(bytes)
+			if len(long_entries) == 0:
+				long_entries.append(entry)
+			else:
+				if entry.LDIR_Ord & _LAST_LONG_ENTRY:
+					# begins a new entry
+					long_entries = [ entry ]
+				elif (
+					# we can add it if the checksum is the same as the last
+					# and the ordinal is one less than the last
+					entry.LDIR_Chksum == long_entries[-1].LDIR_Chksum and
+					(entry.LDIR_Ord + 1) == (long_entries[-1].LDIR_Ord & _LONG_ENTRY_ORD_MASK)
+				):
+					long_entries.append(entry)
+				else:
+					# it's not the last in a new sequence, it's not part of
+					# this one. what is it? dunno
+					long_entries = [ ]
+		else:
+			entry = FATShortDirEntryStruct(bytes)
+			# we should have hit long entry 1 (they're 1-based to prevent 0s
+			# in the first byte)
+			if (
+				len(long_entries) > 0 and
+				(long_entries[-1].LDIR_Ord & _LONG_ENTRY_ORD_MASK) == 1 and
+				long_entries[-1].LDIR_Chksum == short_name_checksum(entry.DIR_Name)
+			):
+				yield FATDirEntry(entry, long_entries)
+			else:
+				yield FATDirEntry(entry)
+			long_entries = [ ]
