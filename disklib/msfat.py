@@ -484,7 +484,7 @@ class FATVolume(object):
 		self._root_dir_sector_count = -1
 		self._fat_sector_count = -1
 		self._total_sector_count = -1
-		self._first_data_sector = -1
+		self._data_sector_start = -1
 		self._data_sector_count = -1
 		self._cluster_count = -1
 		self.fat_type = None
@@ -492,7 +492,9 @@ class FATVolume(object):
 		self._fat_buffer = None
 		self._fat_buffer_sector = -1
 
-		self._read_bpb()
+		self._init_bpb()
+		self._init_calcs()
+		self._determine_fat_type()
 
 
 	def _open_sector_run(self, first_sector, count):
@@ -570,8 +572,8 @@ class FATVolume(object):
 		if b.BPB_RsvdSecCnt > self._total_sector_count:
 			yield (_INVALID, "BPB_RsvdSecCnt exceeds volume sector count ({0:04X} > {1:04X})".format(b.BPB_RsvdSecCnt, self._total_sector_count))
 
-		if self._first_data_sector >= self._total_sector_count:
-			yield (_INVALID, "Data area begins beyond volume capacity ({0:04X} >= {1:04X})".format(self._first_data_sector, self._total_sector_count))
+		if self._data_sector_start >= self._total_sector_count:
+			yield (_INVALID, "Data area begins beyond volume capacity ({0:04X} >= {1:04X})".format(self._data_sector_start, self._total_sector_count))
 
 		if b.BPB_SecPerTrk != self._geometry.sectors:
 			yield (_UNCOMMON, "Sector per track mismatch (read=0x{0:04X}, geometry=0x{1:04X})".format(b.BPB_SecPerTrk, self._geometry.sectors))
@@ -720,7 +722,7 @@ class FATVolume(object):
 		
 		for fat_index in xrange(b.BPB_NumFATs):
 			self.active_fat_index = fat_index
-			if self._first_fat_sector() >= self._geometry.total_sector_count():
+			if self._calc_fat_sector_start() >= self._geometry.total_sector_count():
 				yield (_INVALID, "Canceling FAT check at FAT[{0}]: First sector of this FAT exceeds volume sector count".format(fat_index))
 				break
 
@@ -792,7 +794,7 @@ class FATVolume(object):
 
 		# this is the first invalid, not the last valid
 		# so feeding it to xrange is correct
-		end_sector = self._first_fat_sector() + self._fat_sector_count
+		end_sector = self._calc_fat_sector_start() + self._fat_sector_count
 
 		for current_sector in xrange(start_sector, end_sector):
 			sec = self._read_sector(current_sector)
@@ -815,7 +817,7 @@ class FATVolume(object):
 	def _seek_cluster(self, cluster):
 		if cluster < _MIN_CLUSTER_NUM:
 			raise SeekError("Invalid cluster number", cluster)
-		self._seek_sector(self._first_sector_of_cluster(cluster))
+		self._seek_sector(self._cluster_sector_start(cluster))
 
 	def _read(self, byte_count):
 		return self._stream.read(byte_count)
@@ -828,14 +830,11 @@ class FATVolume(object):
 		self._seek_cluster(cluster)
 		return self._read(self._bytes_per_sector * self._bpb.BPB_SecPerClus)
 
-	def _read_bpb(self):
+
+	def _init_bpb(self):
 		self._seek_sector(0)
 
 		self._bpb = BiosParameterBlock.from_stream(self._stream)
-
-		# you could use self._bpb.BPB_BytsPerSec
-		# self._bytes_per_sector = self._bpb.BPB_BytsPerSec
-		self._bytes_per_sector = self._geometry.sector_size
 
 		bpbx_union = self._read(max(
 			BiosParameterBlock16.size(), BiosParameterBlock32.size()))
@@ -843,13 +842,19 @@ class FATVolume(object):
 		self._bpb16 = BiosParameterBlock16(bpbx_union[:BiosParameterBlock16.size()])
 		self._bpb32 = BiosParameterBlock32(bpbx_union[:BiosParameterBlock32.size()])
 
-		self._root_dir_sector_count = self._calc_root_dir_sector_count()
+	def _init_calcs(self):
+		# you could use self._bpb.BPB_BytsPerSec
+		# self._bytes_per_sector = self._bpb.BPB_BytsPerSec
+		self._bytes_per_sector = self._geometry.sector_size
+
+		# you could use BPB_TotSec16 / BPB_TotSec32
+		# self._total_sector_count = self._calc_total_sector_count()
+		self._total_sector_count = self._geometry.total_sector_count()
+
 		self._fat_sector_count = self._calc_fat_sector_count()
-
-		# may want to use geometry here too
-		self._total_sector_count = self._calc_total_sector_count()
-
-		self._first_data_sector = self._calc_first_data_sector()
+		self._root_dir_sector_start = self._calc_root_dir_sector_start()
+		self._root_dir_sector_count = self._calc_root_dir_sector_count()
+		self._data_sector_start = self._calc_data_sector_start()
 		self._data_sector_count = self._calc_data_sector_count()
 
 		self._cluster_count = 0
@@ -857,17 +862,23 @@ class FATVolume(object):
 			self._cluster_count = self._data_sector_count / self._bpb.BPB_SecPerClus
 		self._max_cluster_num = self._cluster_count + 1
 
-		self.fat_type = self._determine_fat_type()
 
-		if self.fat_type == FATVolume.FAT32:
-			extrabits = 0xFFFF000
-		elif self.fat_type == FATVolume.FAT16:
-			extrabits = 0xF000
-		else:
-			extrabits = 0
+	def _calc_total_sector_count(self):
+		if self._bpb.BPB_TotSec16 != 0:
+			return self._bpb.BPB_TotSec16
+		return self._bpb.BPB_TotSec32
 
-		self._fat_eoc = _FAT12_EOC | extrabits
-		self._fat_bad = _FAT12_BAD | extrabits
+	def _calc_fat_sector_start(self):
+		return self._bpb.BPB_RsvdSecCnt + self._fat_sector_count * self.active_fat_index
+
+	def _calc_fat_sector_count(self):
+		if self._bpb.BPB_FATSz16 != 0:
+			return self._bpb.BPB_FATSz16
+		return self._bpb32.BPB_FATSz32
+
+	def _calc_root_dir_sector_start(self):
+		b = self._bpb
+		return (b.BPB_RsvdSecCnt + self._fat_sector_count * b.BPB_NumFATs)
 
 	def _calc_root_dir_sector_count(self):
 		b = self._bpb
@@ -880,31 +891,14 @@ class FATVolume(object):
 		bytes = (b.BPB_RootEntCnt * 32) + (self._bytes_per_sector - 1)
 		return int(math.ceil(float(bytes) / self._bytes_per_sector))
 
-	def _calc_fat_sector_count(self):
-		if self._bpb.BPB_FATSz16 != 0:
-			return self._bpb.BPB_FATSz16
-		return self._bpb32.BPB_FATSz32
-
-	def _calc_total_sector_count(self):
-		if self._bpb.BPB_TotSec16 != 0:
-			return self._bpb.BPB_TotSec16
-		return self._bpb.BPB_TotSec32
-
-	def _calc_first_data_sector(self):
-		b = self._bpb
-		return (
-			b.BPB_RsvdSecCnt + b.BPB_NumFATs * self._fat_sector_count +
-			self._root_dir_sector_count
-		)
+	def _calc_data_sector_start(self):
+		return self._root_dir_sector_start + self._root_dir_sector_count
 
 	def _calc_data_sector_count(self):
-		return self._total_sector_count - self._calc_first_data_sector()
+		return self._total_sector_count - self._calc_data_sector_start()
 
-	def _first_sector_of_cluster(self, n):
-		return (n - 2) * self._bpb.BPB_SecPerClus + self._first_data_sector
-
-	def _first_fat_sector(self):
-		return self._bpb.BPB_RsvdSecCnt + self._fat_sector_count * self.active_fat_index
+	def _cluster_sector_start(self, n):
+		return (n - 2) * self._bpb.BPB_SecPerClus + self._data_sector_start
 
 	def _get_fat_offset(self, clustern):
 		if self.fat_type == FATVolume.FAT32:
@@ -918,7 +912,7 @@ class FATVolume(object):
 
 	def _get_fat_address(self, clustern):
 		sec_offset, byte_offset = self._get_fat_offset(clustern)
-		return (sec_offset + self._first_fat_sector(), byte_offset)
+		return (sec_offset + self._calc_fat_sector_start(), byte_offset)
 
 	def _get_fat_entry(self, clustern):
 		sec_num, sec_offset = self._get_fat_address(clustern)
@@ -956,7 +950,16 @@ class FATVolume(object):
 
 	def _determine_fat_type(self):
 		if self._cluster_count < 4085:
-			return FATVolume.FAT12
+			self.fat_type = FATVolume.FAT12
+			extrabits = 0
+
 		elif self._cluster_count < 65525:
-			return FATVolume.FAT16
-		return FATVolume.FAT32
+			self.fat_type = FATVolume.FAT16
+			extrabits = 0xF000
+
+		else:
+			self.fat_type = FATVolume.FAT32
+			extrabits = 0xFFFF000
+
+		self._fat_eoc = _FAT12_EOC | extrabits
+		self._fat_bad = _FAT12_BAD | extrabits
