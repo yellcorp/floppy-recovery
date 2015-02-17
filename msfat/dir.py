@@ -226,6 +226,29 @@ class FATDirEntry(object):
 		)
 
 
+def _can_append_long_entry(e, f):
+	"""True if f is a FATLongDirEntryStruct that can follow e. For f to follow
+	e, f and e must have the same checksum, and f's ordinal must be one less
+	than e"""
+	return (
+		f.LDIR_Chksum == e.LDIR_Chksum and
+		f.LDIR_Ord + 1 == (e.LDIR_Ord & _LONG_ENTRY_ORD_MASK)
+	)
+
+
+def _long_entry_set_belongs_to_short_entry(long_entries, short_entry):
+	"""True if a list of long entries is associated with the short_entry.
+	The last member of long_entries must be numbered 1, and its checksum value
+	must match the calculated checksum of short_entry's name. Only the last
+	checksum in long_entries is checked. It's assumed that long_entries is
+	accumulated with the use of _can_append_long_entry"""
+	return (
+		len(long_entries) > 0 and
+		(long_entries[-1].LDIR_Ord & _LONG_ENTRY_ORD_MASK) == 1 and
+		long_entries[-1].LDIR_Chksum == short_name_checksum(short_entry.DIR_Name)
+	)
+
+
 def read_dir(stream):
 	long_entries = [ ]
 	while True:
@@ -245,12 +268,7 @@ def read_dir(stream):
 				if entry.LDIR_Ord & _LAST_LONG_ENTRY:
 					# begins a new entry
 					long_entries = [ entry ]
-				elif (
-					# we can add it if the checksum is the same as the last
-					# and the ordinal is one less than the last
-					entry.LDIR_Chksum == long_entries[-1].LDIR_Chksum and
-					(entry.LDIR_Ord + 1) == (long_entries[-1].LDIR_Ord & _LONG_ENTRY_ORD_MASK)
-				):
+				elif _can_append_long_entry(long_entries[-1], entry):
 					long_entries.append(entry)
 				else:
 					# it's not the last in a new sequence, it's not part of
@@ -261,11 +279,7 @@ def read_dir(stream):
 			long_name = None
 			# we should have hit long entry 1 (they're 1-based to prevent 0s
 			# in the first byte)
-			if (
-				len(long_entries) > 0 and
-				(long_entries[-1].LDIR_Ord & _LONG_ENTRY_ORD_MASK) == 1 and
-				long_entries[-1].LDIR_Chksum == short_name_checksum(entry.DIR_Name)
-			):
+			if _long_entry_set_belongs_to_short_entry(long_entries, entry):
 				long_name = _assemble_long_entries(long_entries)
 
 			yield FATDirEntry(entry, long_name)
