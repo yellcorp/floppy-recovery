@@ -125,14 +125,6 @@ def _buffer_is_free(buf):
 def _buffer_is_last(buf):
 	return buf[0] == _LAST_MARKER
 
-def _assemble_long_entries(long_entries):
-	buf = "".join(
-		e.LDIR_Name1 + e.LDIR_Name2 + e.LDIR_Name3
-		for e in reversed(long_entries)
-	)
-	name = buf.decode("utf_16_le", "replace") + u"\0"
-	return name[:name.find(u"\0")]
-
 class FATDirEntry(object):
 	def __init__(self, short_entry, long_name=None):
 		self.short_entry = short_entry
@@ -247,6 +239,15 @@ def _long_entry_set_belongs_to_short_entry(long_entries, short_entry):
 		(long_entries[-1].LDIR_Ord & _LONG_ENTRY_ORD_MASK) == 1 and
 		long_entries[-1].LDIR_Chksum == short_name_checksum(short_entry.DIR_Name)
 	)
+
+
+def _assemble_long_entries(long_entries):
+	buf = "".join(
+		e.LDIR_Name1 + e.LDIR_Name2 + e.LDIR_Name3
+		for e in reversed(long_entries)
+	)
+	name = buf.decode("utf_16_le", "replace") + u"\0"
+	return name[:name.find(u"\0")]
 
 
 def read_dir(stream):
