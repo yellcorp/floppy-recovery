@@ -135,7 +135,7 @@ def _assemble_long_entries(long_entries):
 
 	# if there were any missing entries, that block of 13 chars will be
 	# \0s in the middle of the string
-	return buf.decode("utf_16_le").rstrip("\0")
+	return buf.decode("utf_16_le").rstrip(u"\0")
 
 class FATDirEntry(object):
 	def __init__(self, short_entry, long_entries=None):
