@@ -2,10 +2,10 @@ import calendar
 import time
 
 
-import utils.NamedStruct
+from utils.NamedStruct import NamedStruct
 
 from msfat import ATTR_READ_ONLY, ATTR_HIDDEN, ATTR_SYSTEM, ATTR_VOLUME_ID, \
-	ATTR_DIRECTORY, ATTR_ARCHIVEm ATTR_LONG_NAME, ATTR_LONG_NAME_MASK, \
+	ATTR_DIRECTORY, ATTR_ARCHIVE, ATTR_LONG_NAME, ATTR_LONG_NAME_MASK, \
 	ATTR_RESERVED_MASK
 
 
