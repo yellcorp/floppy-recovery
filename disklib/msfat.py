@@ -1,3 +1,4 @@
+import collections
 import math
 import re
 import struct
@@ -110,6 +111,30 @@ class BiosParameterBlock32(NamedStruct):
 		("8s",  "BS_FilSysType")
 	]
 
+
+_VolumeInfo = collections.namedtuple(
+	"_VolumeInfo", [
+		"fat_type",
+		"fat_type_id",             # BS_FilSysType
+		"oem_name",                # BS_OEMName
+		"bs_volume_id",            # BS_VolID
+		"bs_volume_name",          # BS_VolLab
+		"bytes_per_sector",        # BPB_BytsPerSec
+		"sectors_per_track",       # BPB_SecPerTrk
+		"head_count",              # BPB_NumHeads
+		"sector_count",            # self._total_sector_count
+		"single_fat_sector_count", # self._fat_sector_count
+		"fat_count",               # BPB_NumFATs
+		"fat0_sector_start",       # ??
+		"root_dir_sector_start",   # self._root_dir_sector_start
+		"root_dir_sector_count",   # self._root_dir_sector_count
+		"root_entry_count",        # BPB_RootEntCnt
+		"data_sector_start",       # self._data_sector_start
+		"data_sector_count",       # self._data_sector_count
+		"sectors_per_cluster",     # BPB_SecPerClus
+		"cluster_count"            # self._cluster_count
+	]
+)
 
 # Also, Sector[0][510] must == 0x55 and [0][511] must == 0xAA
 
@@ -495,6 +520,33 @@ class FATVolume(object):
 		self._init_bpb()
 		self._init_calcs()
 		self._determine_fat_type()
+
+
+	def get_info(self):
+		b = self._bpb
+		bx = self.fat_type == FATVolume.FAT32 and self._bpb32 or self._bpb16
+
+		return _VolumeInfo(
+			self.fat_type,
+			bx.BS_FilSysType,
+			b.BS_OEMName,
+			bx.BS_VolID,
+			bx.BS_VolLab,
+			b.BPB_BytsPerSec,
+			b.BPB_SecPerTrk,
+			b.BPB_NumHeads,
+			self._total_sector_count,
+			self._fat_sector_count,
+			b.BPB_NumFATs,
+			b.BPB_RsvdSecCnt,
+			self._root_dir_sector_start,
+			self._root_dir_sector_count,
+			b.BPB_RootEntCnt,
+			self._data_sector_start,
+			self._data_sector_count,
+			b.BPB_SecPerClus,
+			self._cluster_count
+		)
 
 
 	def _open_root_dir(self):
