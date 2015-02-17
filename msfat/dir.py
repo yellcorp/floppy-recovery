@@ -151,7 +151,13 @@ def _assemble_long_entries(long_entries):
 class FATDirEntry(object):
 	def __init__(self, short_entry, long_entries=None):
 		self.short_entry = short_entry
-		self.long_entry = _assemble_long_entries(long_entries)
+		self.long_entries = long_entries
+		self.long_name = _assemble_long_entries(long_entries)
+
+	def name(self):
+		if self.long_name is None:
+			return self.short_name()
+		return self.long_name
 
 	def short_name(self):
 		prefix = self.short_entry.DIR_Name[:8].rstrip()
@@ -186,6 +192,18 @@ class FATDirEntry(object):
 	def is_archive(self):
 		return self.short_entry.DIR_Attr & ATTR_ARCHIVE != 0
 
+	def attr_string(self):
+		return "".join(
+			(b and ch or "-") for ch, b in [
+				("A", self.is_archive()),
+				("D", self.is_directory()),
+				("V", self.is_volume_id()),
+				("S", self.is_system()),
+				("H", self.is_hidden()),
+				("R", self.is_read_only())
+			]
+		)
+
 	def create_time(self, timezone=None):
 		return fat_time_to_unix(
 			self.short_entry.DIR_CrtDate,
@@ -215,3 +233,10 @@ class FATDirEntry(object):
 
 	def file_size(self):
 		return self.short_entry.DIR_FileSize
+
+	def __str__(self):
+		return "{0!r} [{1}] {2}".format(
+			self.name(),
+			self.attr_string(),
+			self.file_size()
+		)
