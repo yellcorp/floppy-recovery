@@ -26,8 +26,8 @@ def short_name_checksum(short_name):
 		raise ValueError("short_name must be exactly 11 characters long")
 	s = 0
 	for ch in short_name:
-		# rotate right and add byte
-		s = ((s & 1) << 7) | ((s & 0xFE) >> 1) + ord(ch)
+		# 8-bit rotate right and add (the add is 8 bit too!!)
+		s = ((s >> 1) + (s << 7) + ord(ch)) & 0xFF
 	return s
 
 def unpack_fat_date(date16):
