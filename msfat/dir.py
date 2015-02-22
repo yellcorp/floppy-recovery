@@ -9,8 +9,8 @@ from msfat import ATTR_READ_ONLY, ATTR_HIDDEN, ATTR_SYSTEM, ATTR_VOLUME_ID, \
 	ATTR_RESERVED_MASK
 
 
-_THISDIR_NAME = ".          "
-_UPDIR_NAME =   "..         "
+THISDIR_NAME = ".          "
+UPDIR_NAME =   "..         "
 
 
 def allowed_in_short_name(char):
@@ -260,7 +260,7 @@ def _long_entry_set_belongs_to_short_entry(long_entries, short_entry):
 	)
 
 
-def _assemble_long_entries(long_entries):
+def assemble_long_entries(long_entries):
 	name_bytes = bytearray()
 	for e in reversed(long_entries):
 		name_bytes.extend(e.LDIR_Name1)
@@ -305,7 +305,7 @@ def read_dir(stream):
 			# we should have hit long entry 1 (they're 1-based to prevent 0s
 			# in the first byte)
 			if _long_entry_set_belongs_to_short_entry(long_entries, entry):
-				long_name = _assemble_long_entries(long_entries)
+				long_name = assemble_long_entries(long_entries)
 
 			yield FATAggregateDirEntry(entry, long_name)
 			long_entries = [ ]
