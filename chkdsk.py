@@ -11,7 +11,7 @@ import disklib.validity
 LOGLEVEL_TO_PREFIX = {
 	msfat.chkdsk.CHKDSK_LOG_INVALID:  u'\u274c  ', # cross
 	msfat.chkdsk.CHKDSK_LOG_UNCOMMON: u'\u26a0\ufe0f  ', # warning sign with emoji variant suffix
-	msfat.chkdsk.CHKDSK_LOG_INFO:     "\xF0\x9F\x92\xAC  " # UTF8 for speech balloon U+1F4AC
+	msfat.chkdsk.CHKDSK_LOG_INFO:     u'\u2139\ufe0f  '  # INFORMATION SOURCE with emoji variant suffix
 }
 
 
