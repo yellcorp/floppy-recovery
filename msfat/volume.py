@@ -3,21 +3,9 @@ import collections
 import struct
 
 
-from msfat import TYPE_FAT12, TYPE_FAT16, TYPE_FAT32
+from msfat import TYPE_FAT12, TYPE_FAT16, TYPE_FAT32, SeekError
 from msfat.chkdsk import chkdsk
 import msfat.stream
-
-
-class MediaError(Exception):
-	pass
-
-
-class SeekError(MediaError):
-	pass
-
-
-class AllocationError(MediaError):
-	pass
 
 
 _FAT32_ENTRY_MASK = 0x0FFFFFFF

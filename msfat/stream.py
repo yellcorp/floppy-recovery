@@ -1,3 +1,6 @@
+from msfat import AllocationError
+
+
 class _BaseStream(object):
 	def read(self, count):
 		bufs = [ ]

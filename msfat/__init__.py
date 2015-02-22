@@ -24,3 +24,15 @@ def _inline_hexdump(thing):
 
 def _bytes_to_str(byte_iter):
 	return str(bytearray(byte_iter))
+
+
+class MediaError(Exception):
+	pass
+
+
+class SeekError(MediaError):
+	pass
+
+
+class AllocationError(MediaError):
+	pass
