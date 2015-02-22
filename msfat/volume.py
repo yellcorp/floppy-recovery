@@ -3,7 +3,7 @@ import collections
 import struct
 
 
-from msfat import TYPE_FAT12, TYPE_FAT16, TYPE_FAT32, SeekError
+from msfat import TYPE_FAT12, TYPE_FAT16, TYPE_FAT32, SeekError, _bytes_to_str
 from msfat.chkdsk import chkdsk
 import msfat.stream
 
@@ -167,10 +167,10 @@ class FATVolume(object):
 
 		return _VolumeInfo(
 			self.fat_type,
-			bx.BS_FilSysType,
-			b.BS_OEMName,
+			_bytes_to_str(bx.BS_FilSysType),
+			_bytes_to_str(b.BS_OEMName),
 			bx.BS_VolID,
-			bx.BS_VolLab,
+			_bytes_to_str(bx.BS_VolLab),
 			b.BPB_BytsPerSec,
 			b.BPB_SecPerTrk,
 			b.BPB_NumHeads,
