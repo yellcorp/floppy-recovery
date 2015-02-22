@@ -16,8 +16,20 @@ UPDIR_NAME =   "..         "
 def allowed_in_short_name(char):
 	return char == '\x05' or char >= '\x20' and char not in '"*+,./:;<=>?[\\]|'
 
+def is_valid_short_name(s):
+	return s[0] != ' ' and all(allowed_in_short_name(c) for c in s)
+
 def allowed_in_long_name(char):
 	return char >= '\x20' and char not in '"*/:<>?\\|'
+
+def is_valid_long_name(s):
+	return all(allowed_in_long_name(c) for c in s)
+
+def is_long_name_correctly_padded(s):
+	null_pos = s.find(u"\0")
+	if null_pos == -1:
+		return True
+	return all(c == u"\uFFFF" for c in s[null_pos + 1:])
 
 def short_name_checksum(short_name_bytes):
 	"""Calculates a single-byte checksum of a short name for use in
