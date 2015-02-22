@@ -1,4 +1,4 @@
-from ctypes import LittleEndianStructure, Union, c_ubyte, c_uint16, c_uint32
+from ctypes import LittleEndianStructure, Union, sizeof, c_ubyte, c_uint16, c_uint32
 import calendar
 import itertools
 import time
@@ -283,7 +283,7 @@ def _assemble_long_entries(long_entries):
 def read_dir(stream):
 	long_entries = [ ]
 	while True:
-		bytes = stream.read(32)
+		bytes = stream.read(sizeof(FATDirEntry))
 		if len(bytes) == 0:
 			# this is unexpected if we're not intentionally reading beyond end
 			break
