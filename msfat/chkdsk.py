@@ -1,5 +1,3 @@
-import re
-
 from msfat import TYPE_FAT12, TYPE_FAT16, TYPE_FAT32, \
 	_inline_hexdump, _bytes_to_str
 
