@@ -1,5 +1,13 @@
+from ctypes import sizeof
+import calendar
+
 from msfat import TYPE_FAT12, TYPE_FAT16, TYPE_FAT32, \
+	ATTR_VOLUME_ID, ATTR_VALID_MASK, ATTR_RESERVED_MASK, \
 	_inline_hexdump, _bytes_to_str
+
+from msfat.dir import FATDirEntry, assemble_long_entries, is_valid_short_name, \
+	is_valid_long_name, is_long_name_correctly_padded, THISDIR_NAME, \
+	UPDIR_NAME, unpack_fat_date, unpack_fat_time
 
 
 # Log levels match values of equivalent severity in python logging module
@@ -25,6 +33,8 @@ _FAT_SIG = "\x55\xAA"
 # the max cluster number is 0x0FFFFFF6. when compensating for the lowest
 # cluster num being 2, the max COUNT is 0x0FFFFFF5
 _FAT32_MAX_ALLOWED_CLUSTER_COUNT = 0x0FFFFFF5
+
+_NULL_DIR_ENTRY = '\0' * sizeof(FATDirEntry)
 
 
 def _is_common_jmpboot(bytes):
@@ -139,6 +149,9 @@ def chkdsk(volume):
 			)
 
 	for message in _chkdsk_fat(v):
+		yield message
+
+	for message in _chkdsk_dir(v, "\\", v._open_root_dir(), None, None, True):
 		yield message
 
 
@@ -329,3 +342,214 @@ def _chkdsk_highfat(v):
 
 	if nonzeroes > 0:
 		yield (_UNCOMMON, "FAT[{0}] has non-zero data in its unused area".format(v.active_fat_index))
+
+
+def _chkdsk_dir(vol, dir_name, stream, dir_cluster, parent_cluster, allow_vol):
+	message_prefix = u"In dir {0}: ".format(dir_name)
+	long_entries = [ ]
+	seen_names = set()
+	seen_vol = False
+
+	while True:
+		bytes = stream.read(sizeof(FATDirEntry))
+		if len(bytes) == 0:
+			yield (_INVALID, message_prefix + "Reached end of directory without seeing end marker")
+			return
+
+		entry = FATDirEntry.from_buffer_copy(bytes)
+		if entry.is_last_in_dir():
+			if len(long_entries) > 0:
+				yield (_INFO, message_prefix +
+					u"Orphaned LFN sequence {0}: End of directory reached".format(
+						assemble_long_entries(long_entries)
+					)
+				)
+
+			if bytes != _NULL_DIR_ENTRY:
+				yield (_INFO, message_prefix + "End of dir has non-null data: {0!r}".format(_bytes_to_str(entry.DIR_Name)))
+			for message in _chkdsk_dir_trail(message_prefix, stream):
+				yield message
+			return
+		elif entry.is_free_entry():
+			#FIXME: copy pasted from above! fix this garbage, don't code at 3am
+			if len(long_entries) > 0:
+				yield (_INFO, message_prefix +
+					u"Orphaned LFN sequence {0}: Free short entry".format(
+						assemble_long_entries(long_entries)
+					)
+				)
+
+			yield (_INFO, message_prefix + "Free entry: {0!r}".format(_bytes_to_str(entry.DIR_Name)))
+		elif entry.is_long_name_segment():
+			if entry.is_final_long_name_segment():
+				if len(long_entries) > 0:
+					yield (_INFO, message_prefix +
+						u"Orphaned LFN sequence {0}: Sequence reset".format(
+							assemble_long_entries(long_entries)
+						)
+					)
+				long_entries = [ entry ]
+
+			elif len(long_entries) == 0:
+				yield (_INFO, message_prefix +
+					u"Orphaned LFN segment {0}: No final bit".format(
+						assemble_long_entries([ entry ])
+					)
+				)
+				long_entries = [ ]
+
+			elif entry.long_name_ordinal() + 1 != long_entries[-1].long_name_ordinal():
+				yield (_INFO, message_prefix +
+					u"Orphaned LFN segment {0}: Non sequential segment {1}".format(
+						assemble_long_entries(long_entries),
+						assemble_long_entries([ entry ])
+					)
+				)
+				long_entries = [ ]
+
+			elif entry.LDIR_Chksum != long_entries[-1].LDIR_Chksum:
+				yield (_INFO, message_prefix +
+					u"Orphaned LFN segment {0}: Checksum mismatch in segment {1}".format(
+						assemble_long_entries(long_entries),
+						assemble_long_entries([ entry ])
+					)
+				)
+				long_entries = [ ]
+
+			else:
+				long_entries.append(entry)
+
+		else:
+			long_name = None
+			if len(long_entries) > 0:
+				long_name = assemble_long_entries(long_entries)
+				if long_entries[-1].long_name_ordinal() != 1:
+					yield (_INFO, message_prefix +
+						u"Orphaned LFN segment {0}: Incomplete sequence".format(long_name)
+					)
+					long_name = None
+
+				elif long_entries[-1].LDIR_Chksum != entry.short_name_checksum():
+					yield (_INFO, message_prefix +
+						u"Orphaned LFN segment {0}: LFN checksum mismatch for short name {1!r}".format(
+							long_name,
+							_bytes_to_str(entry.DIR_Name)
+						)
+					)
+					long_name = None
+
+				long_entries = [ ]
+
+			if long_name is not None:
+				if not is_valid_long_name(long_name):
+					yield (_INVALID, message_prefix + u"Long filename {0} is not valid".format(long_name))
+
+				if not is_long_name_correctly_padded(long_name):
+					yield (_INVALID, message_prefix + u"Long filename {0} is not correctly padded".format(long_name))
+
+				if long_name.lower() in seen_names:
+					yield (_INVALID, message_prefix + u"Long filename {0} occurs more than once".format(long_name))
+				else:
+					seen_names.add(long_name.lower())
+
+			short_name = _bytes_to_str(entry.DIR_Name)
+			if not is_valid_short_name(short_name):
+				yield (_INVALID, message_prefix + "Short filename {0!r} is not valid".format(short_name))
+
+			if short_name.lower() in seen_names:
+				yield (_INVALID, message_prefix + "Short filename {0!r} occurs more than once".format(short_name))
+			else:
+				seen_names.add(short_name.lower())
+
+			if entry.DIR_Attr & ATTR_VOLUME_ID:
+				if not allow_vol:
+					yield (_INVALID, message_prefix + "Volume id {0!r} not allowed in non-root dir".format(short_name))
+				elif seen_vol:
+					yield (_INVALID, message_prefix + "Extra volume id {0!r}".format(short_name))
+				else:
+					seen_vol = True
+				if entry.DIR_Attr & ATTR_VALID_MASK & (~ATTR_VOLUME_ID):
+					yield (_INVALID, message_prefix + "Volume id {0!r} has non-volume attribute bits set".format(short_name))
+
+			filename = long_name is None and repr(short_name) or long_name
+			sname_prefix = message_prefix + filename + " "
+			if entry.DIR_Attr & ATTR_RESERVED_MASK:
+				yield (_UNCOMMON, sname_prefix + "has reserved attribute bits set")
+
+			if entry.DIR_NTRes != 0:
+				yield (_UNCOMMON, sname_prefix + "has non-zero DIR_NTRes (0x{0:02X})".format(entry.DIR_NTRes))
+
+			if entry.DIR_CrtTimeTenth > 200:
+				yield (_INVALID, sname_prefix + "DIR_CrtTimeTenth out of range")
+
+			for date_field, can_be_zero in (("DIR_CrtDate", True), ("DIR_LstAccDate", True), ("DIR_WrtDate", False)):
+				for message in _chkdsk_direntry_date(sname_prefix, date_field, getattr(entry, date_field), can_be_zero):
+					yield message
+
+			for time_field in ("DIR_CrtTime", "DIR_WrtTime"):
+				for message in _chkdsk_direntry_time(sname_prefix, time_field, getattr(entry, time_field)):
+					yield message
+
+			if entry.DIR_FileSize > 0:
+				if entry.is_directory():
+					yield (_INVALID, sname_prefix + "is a directory with non-zero file size")
+					# TODO: also check cluster numbers on dirs and vols are zero. 
+					# these yields are getting stupid. they got stupid a long
+					# time ago!
+				elif entry.is_volume_id():
+					yield (_INVALID, sname_prefix + "is a volume id with non-zero file size")
+				elif entry.start_cluster() == 0:
+					yield (_INVALID, sname_prefix + "has non-zero file size, but has no start cluster")
+				elif not vol._is_valid_cluster_num(entry.start_cluster()):
+					yield (_INVALID, sname_prefix + "starts at invalid cluster number 0x{0:08X}".format(entry.start_cluster()))
+
+			elif entry.start_cluster() != 0:
+				if not entry.is_directory():
+					yield (_INVALID, sname_prefix + "has zero file size, but also has a start cluster")
+
+			if dir_cluster is not None:
+				for message in _chkdsk_metadir(entry, THISDIR_NAME, dir_cluster):
+					yield message
+				dir_cluster = None
+
+			elif parent_cluster is not None:
+				for message in _chkdsk_metadir(entry, UPDIR_NAME, parent_cluster):
+					yield message
+				parent_cluster = None
+
+
+def _chkdsk_dir_trail(message_prefix, stream):
+	while True:
+		bytes = stream.read(sizeof(FATDirEntry))
+		if len(bytes) == 0:
+			return
+		if bytes != _NULL_DIR_ENTRY:
+			entry = FATDirEntry.from_buffer_copy(bytes)
+			yield (_INFO, message_prefix + "trailing entry: {0!r}".format(_bytes_to_str(entry.DIR_Name)))
+
+
+def _chkdsk_direntry_date(message_prefix, attr_name, value, can_be_zero):
+	if can_be_zero and value == 0:
+		return
+
+	year, month, day = unpack_fat_date(value)
+	if 1 <= month <= 12:
+		if day == 0 or day == 32:
+			yield (_INVALID, message_prefix + "{0} has invalid day: {1}".format(attr_name, day))
+		else:
+			_, days_in_month = calendar.monthrange(year, month)
+			if day > days_in_month:
+				yield (_INVALID, message_prefix + "{0} has invalid day for {1}/{2}: {3}".format(attr_name, month, year, day))
+	else:
+		yield (_INVALID, message_prefix + "{0} has invalid month: {1}".format(attr_name, month))
+
+
+def _chkdsk_direntry_time(message_prefix, attr_name, value):
+	hours, minutes, seconds = unpack_fat_time(value)
+	for unit_name, unit_value, unit_max in (
+		("hours",   hours,   23),
+		("minutes", minutes, 59),
+		("seconds", seconds, 59)
+	):
+		if unit_value > unit_max:
+			yield (_INVALID, message_prefix + "{0} has invalid {1}: {2}".format(attr_name, unit_name, unit_value))
