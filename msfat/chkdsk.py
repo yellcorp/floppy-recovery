@@ -163,7 +163,7 @@ def _chkdsk16(v):
 	elif b16.BS_DrvNum == 0x80 and b.BPB_Media == 0xF0:
 		yield (_UNCOMMON, "BS_DrvNum is fixed but BPB_Media is removable")
 
-	for message in _chkdsk_bpbx(v, b16):
+	for message in _chkdsk_bpbx_common(v, b16):
 		yield message
 
 
@@ -206,11 +206,11 @@ def _chkdsk32(v):
 	if v._cluster_count > _FAT32_MAX_ALLOWED_CLUSTER_COUNT:
 		yield (_INVALID, "Cluster count exceeds maximum allowed for {0}: 0x{1:08X} > 0x{2:08X}".format(v.fat_type, v._cluster_count, _FAT32_MAX_ALLOWED_CLUSTER_COUNT))
 
-	for message in _chkdsk_bpbx(v, b32):
+	for message in _chkdsk_bpbx_common(v, b32):
 		yield message
 
 
-def _chkdsk_bpbx(v, bx):
+def _chkdsk_bpbx_common(v, bx):
 	if bx.BS_DrvNum not in _VALID_DRIVE_NUM:
 		yield (_INVALID, "Invalid BS_DrvNum: 0x{0:02X}".format(bx.BS_DrvNum))
 
