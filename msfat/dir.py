@@ -1,19 +1,17 @@
+from ctypes import LittleEndianStructure, Union, c_ubyte, c_uint16, c_uint32
 import calendar
+import itertools
 import time
 
-
-from utils.NamedStruct import NamedStruct
 
 from msfat import ATTR_READ_ONLY, ATTR_HIDDEN, ATTR_SYSTEM, ATTR_VOLUME_ID, \
 	ATTR_DIRECTORY, ATTR_ARCHIVE, ATTR_LONG_NAME, ATTR_LONG_NAME_MASK, \
 	ATTR_RESERVED_MASK
 
 
-_LAST_MARKER = "\x00"
-_FREE_MARKER = "\xE5"
-
 _THISDIR_NAME = ".          "
 _UPDIR_NAME =   "..         "
+
 
 def allowed_in_short_name(char):
 	return char == '\x05' or char >= '\x20' and char not in '"*+,./:;<=>?[\\]|'
@@ -21,16 +19,17 @@ def allowed_in_short_name(char):
 def allowed_in_long_name(char):
 	return char >= '\x20' and char not in '"*/:<>?\\|'
 
-def short_name_checksum(short_name):
+def short_name_checksum(short_name_bytes):
 	"""Calculates a single-byte checksum of a short name for use in
-	its associated long filename entries. The short name should be exactly 11
-	characters long, in the space-padded format as is stored on disk."""
-	if len(short_name) != 11:
-		raise ValueError("short_name must be exactly 11 characters long")
+	its associated long filename entries. The short name should be an iterable
+	of exactly 11 unsigned 8-bit ints, in the space-padded format as is stored
+	on disk."""
+	if len(short_name_bytes) != 11:
+		raise ValueError("short_name_bytes must be exactly 11 bytes long")
 	s = 0
-	for ch in short_name:
+	for b in short_name_bytes:
 		# 8-bit rotate right and add (the add is 8 bit too!!)
-		s = ((s >> 1) + (s << 7) + ord(ch)) & 0xFF
+		s = ((s >> 1) + (s << 7) + b) & 0xFF
 	return s
 
 def unpack_fat_date(date16):
@@ -64,9 +63,13 @@ def fat_time_to_unix(date16, time16, add_seconds=0, timezone=None):
 	return epoch + add_seconds
 
 
-class FATShortDirEntryStruct(NamedStruct):
-	endian = "little"
-	fields = [
+_LAST_MARKER = 0x00
+_FREE_MARKER = 0xE5
+_INITIAL_0XE5_PLACEHOLDER = 0x05
+
+class _FATShortDirEntry(LittleEndianStructure):
+	_pack_ = 1
+	_fields_ = [
 		# 8.3 name. restrictions:
 		# 0x20 can't be in [0]
 
@@ -77,55 +80,75 @@ class FATShortDirEntryStruct(NamedStruct):
 		# the first two entries in a non-root dir
 
 		# must be unique within a directory
-		("11s", "DIR_Name"),
+		("DIR_Name",         c_ubyte * 11),
 
-		("B",   "DIR_Attr"), # 0xC0 bits are reserved, set to 0
-		("B",   "DIR_NTRes"), # Reserved by Win NT, set to 0
-		("B",   "DIR_CrtTimeTenth"), # / 100 and add to create time
-		("H",   "DIR_CrtTime"),
-		("H",   "DIR_CrtDate"),
-		("H",   "DIR_LstAccDate"),
+		("DIR_Attr",         c_ubyte), # 0xC0 bits are reserved, set to 0
+		("DIR_NTRes",        c_ubyte), # Reserved by Win NT, set to 0
+		("DIR_CrtTimeTenth", c_ubyte), # / 100 and add to create time
+		("DIR_CrtTime",      c_uint16),
+		("DIR_CrtDate",      c_uint16),
+		("DIR_LstAccDate",   c_uint16),
 
 		# << 16 and | with first cluster. should be 0 on FAT12/16
 		# must be 0 when ATTR_VOLUME_ID set
-		("H",   "DIR_FstClusHI"),
-		("H",   "DIR_WrtTime"),
-		("H",   "DIR_WrtDate"),
+		("DIR_FstClusHI",    c_uint16),
+		("DIR_WrtTime",      c_uint16),
+		("DIR_WrtDate",      c_uint16),
 
 		# must be 0 when ATTR_VOLUME_ID set
 		# if this is a .. entry and the parent is root, must be 0 
 		# (along with DIR_FstClusHI)
-		("H",   "DIR_FstClusLO"),
+		("DIR_FstClusLO",    c_uint16),
 
 		# must be 0 when ATTR_DIRECTORY set
-		("I",   "DIR_FileSize")
+		("DIR_FileSize",     c_uint32)
 	]
+
 
 _LAST_LONG_ENTRY = 0x40
 _LONG_ENTRY_ORD_MASK = 0x3F
-class FATLongDirEntryStruct(NamedStruct):
-	endian = "little"
-	fields = [
-		("B",   "LDIR_Ord"),       # | with LAST_LONG_ENTRY
-		("10s", "LDIR_Name1"),     # UCS2 chars 1-5 of this segment
-		("B",   "LDIR_Attr"),      # Must be ATTR_LONG_NAME
-		("B",   "LDIR_Type"),      # Must be zero. Non-zero for future expansion (which is safe to say never happened)
-		("B",   "LDIR_Chksum"),    # Check byte
-		("12s", "LDIR_Name2"),     # UCS2 chars 6-11 of this segment
-		("H",   "LDIR_FstClusLO"), # Must be 0 for non LFN-aware disk utils
-		("4s",  "LDIR_Name3")      # UCS2 chars 12-13 of this segment
+
+class _FATLongDirEntry(LittleEndianStructure):
+	_pack_ = 1
+	_fields_ = [
+		("LDIR_Ord",         c_ubyte),      # ORed with LAST_LONG_ENTRY
+		("LDIR_Name1",       c_ubyte * 10), # UCS2 chars 1-5 of this segment
+		("LDIR_Attr",        c_ubyte),      # Must be ATTR_LONG_NAME
+		("LDIR_Type",        c_ubyte),      # Must be zero. Non-zero for future expansion (which is safe to say never happened)
+		("LDIR_Chksum",      c_ubyte),      # Check byte
+		("LDIR_Name2",       c_ubyte * 12), # UCS2 chars 6-11 of this segment
+		("LDIR_FstClusLO",   c_uint16),     # Must be 0 for non LFN-aware disk utils
+		("LDIR_Name3",       c_ubyte * 4)   # UCS2 chars 12-13 of this segment
 	]
 
-def _buffer_is_long_entry(buf):
-	return (ord(buf[11]) & ATTR_LONG_NAME_MASK) == ATTR_LONG_NAME
 
-def _buffer_is_free(buf):
-	return buf[0] == _FREE_MARKER
+class FATDirEntry(Union):
+	_anonymous_ = ("short", "long")
+	_fields_ = [
+		("short", _FATShortDirEntry),
+		("long",  _FATLongDirEntry)
+	]
 
-def _buffer_is_last(buf):
-	return buf[0] == _LAST_MARKER
+	def short_name_checksum(self):
+		return short_name_checksum(self.DIR_Name)
 
-class FATDirEntry(object):
+	def is_free_entry(self):
+		return self.DIR_Name[0] == _FREE_MARKER
+
+	def is_last_in_dir(self):
+		return self.DIR_Name[0] == _LAST_MARKER
+
+	def is_long_name_segment(self):
+		return (self.DIR_Attr & ATTR_LONG_NAME_MASK) == ATTR_LONG_NAME
+
+	def is_final_long_name_segment(self):
+		return (self.LDIR_Ord & _LAST_LONG_ENTRY) != 0
+
+	def long_name_ordinal(self):
+		return self.LDIR_Ord & _LONG_ENTRY_ORD_MASK
+
+
+class FATAggregateDirEntry(object):
 	def __init__(self, short_entry, long_name=None):
 		self.short_entry = short_entry
 		self.long_name = long_name
@@ -136,19 +159,22 @@ class FATDirEntry(object):
 		return self.long_name
 
 	def short_name(self):
-		prefix = self.short_entry.DIR_Name[:8].rstrip()
-		if prefix[0:1] == "\x05":
-			prefix = "\xE5" + prefix[1:]
-		suffix = self.short_entry.DIR_Name[8:].rstrip()
+		name = bytearray(self.short_entry.DIR_Name)
+		if name[0] == _INITIAL_0XE5_PLACEHOLDER:
+			name[0] = 0xE5
+
+		prefix = str(name[:8]).rstrip()
+		suffix = str(name[8:]).rstrip()
+
 		if suffix:
 			return prefix + "." + suffix
 		return prefix
 
-	def is_free(self):
-		return self.short_entry.DIR_Name[0] == "\xE5"
+	def is_free_entry(self):
+		return self.short_entry.is_free_entry()
 
-	def is_last(self):
-		return self.short_entry.DIR_Name[0] == "\x00"
+	def is_last_in_dir(self):
+		return self.short_entry.is_last_in_dir()
 
 	def is_read_only(self):
 		return self.short_entry.DIR_Attr & ATTR_READ_ONLY != 0
@@ -219,12 +245,11 @@ class FATDirEntry(object):
 
 
 def _can_append_long_entry(e, f):
-	"""True if f is a FATLongDirEntryStruct that can follow e. For f to follow
-	e, f and e must have the same checksum, and f's ordinal must be one less
-	than e"""
+	"""True if f is a FATDirEntry that can follow e. For f to follow e, f and e
+	must have the same checksum, and f's ordinal must be one less than e"""
 	return (
 		f.LDIR_Chksum == e.LDIR_Chksum and
-		f.LDIR_Ord + 1 == (e.LDIR_Ord & _LONG_ENTRY_ORD_MASK)
+		f.long_name_ordinal() + 1 == e.long_name_ordinal()
 	)
 
 
@@ -236,17 +261,22 @@ def _long_entry_set_belongs_to_short_entry(long_entries, short_entry):
 	accumulated with the use of _can_append_long_entry"""
 	return (
 		len(long_entries) > 0 and
-		(long_entries[-1].LDIR_Ord & _LONG_ENTRY_ORD_MASK) == 1 and
-		long_entries[-1].LDIR_Chksum == short_name_checksum(short_entry.DIR_Name)
+		long_entries[-1].long_name_ordinal() == 1 and
+		long_entries[-1].LDIR_Chksum == short_entry.short_name_checksum()
 	)
 
 
 def _assemble_long_entries(long_entries):
-	buf = "".join(
-		e.LDIR_Name1 + e.LDIR_Name2 + e.LDIR_Name3
-		for e in reversed(long_entries)
-	)
-	name = buf.decode("utf_16_le", "replace") + u"\0"
+	name_bytes = bytearray()
+	for e in reversed(long_entries):
+		name_bytes.extend(e.LDIR_Name1)
+		name_bytes.extend(e.LDIR_Name2)
+		name_bytes.extend(e.LDIR_Name3)
+
+	# append a 16-bit null in case the last entry segment is filled exactly
+	name_bytes.extend((0, 0))
+
+	name = name_bytes.decode("utf_16_le", "replace")
 	return name[:name.find(u"\0")]
 
 
@@ -257,16 +287,17 @@ def read_dir(stream):
 		if len(bytes) == 0:
 			# this is unexpected if we're not intentionally reading beyond end
 			break
-		elif _buffer_is_last(bytes):
+
+		entry = FATDirEntry.from_buffer_copy(bytes)
+		if entry.is_last_in_dir():
 			break
-		elif _buffer_is_free(bytes):
+		elif entry.is_free_entry():
 			continue
-		elif _buffer_is_long_entry(bytes):
-			entry = FATLongDirEntryStruct(bytes)
+		elif entry.is_long_name_segment():
 			if len(long_entries) == 0:
 				long_entries.append(entry)
 			else:
-				if entry.LDIR_Ord & _LAST_LONG_ENTRY:
+				if entry.is_final_long_name_segment():
 					# begins a new entry
 					long_entries = [ entry ]
 				elif _can_append_long_entry(long_entries[-1], entry):
@@ -276,12 +307,11 @@ def read_dir(stream):
 					# this one. what is it? dunno
 					long_entries = [ ]
 		else:
-			entry = FATShortDirEntryStruct(bytes)
 			long_name = None
 			# we should have hit long entry 1 (they're 1-based to prevent 0s
 			# in the first byte)
 			if _long_entry_set_belongs_to_short_entry(long_entries, entry):
 				long_name = _assemble_long_entries(long_entries)
 
-			yield FATDirEntry(entry, long_name)
+			yield FATAggregateDirEntry(entry, long_name)
 			long_entries = [ ]
