@@ -214,6 +214,9 @@ class FATVolume(object):
 		else:
 			raise SeekError("Invalid sector number", sector)
 
+	def _is_valid_cluster_num(self, cluster):
+		return _MIN_CLUSTER_NUM <= cluster <= self._max_cluster_num
+
 	def _seek_cluster(self, cluster):
 		if cluster < _MIN_CLUSTER_NUM:
 			raise SeekError("Invalid cluster number", cluster)
