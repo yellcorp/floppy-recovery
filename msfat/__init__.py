@@ -20,3 +20,7 @@ def _inline_hexdump(thing):
 	else:
 		iterable = thing
 	return " ".join("{0:02X}".format(n) for n in iterable)
+
+
+def _bytes_to_str(byte_iter):
+	return str(bytearray(byte_iter))

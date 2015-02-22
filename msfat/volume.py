@@ -1,8 +1,7 @@
+from ctypes import LittleEndianStructure, Union, sizeof, c_ubyte, c_uint16, c_uint32
 import collections
 import struct
 
-
-from utils.NamedStruct import NamedStruct
 
 from msfat import TYPE_FAT12, TYPE_FAT16, TYPE_FAT32
 from msfat.chkdsk import chkdsk
@@ -26,79 +25,88 @@ _FAT12_EOC = 0xFF8
 _FAT12_BAD = 0xFF7
 _MIN_CLUSTER_NUM = 2
 
-class BiosParameterBlock(NamedStruct):
-	endian = "little"
-	fields = [
-		("3s",  "BS_jmpBoot"),     # \xeb.\x90|\xe9..
-		("8s",  "BS_OEMName"),     # informational only. "MSWIN4.1" recommended
-		("H",   "BPB_BytsPerSec"), # 2^n where 9 <= n <= 12
-		("B",   "BPB_SecPerClus"), # 2^n where 0 <= n <= 7, BPB_BytsPerSec * BPB_SecPerClus <= 32*1024
-		("H",   "BPB_RsvdSecCnt"), # > 0, FAT12 and FAT16 must be 1, FAT32 often 32
-		("B",   "BPB_NumFATs"),    # Should be 2
+class _BiosParameterBlock16(LittleEndianStructure): # also used for FAT12
+	_pack_ = 1
+	_fields_ = [
+		("BS_DrvNum",      c_ubyte),      # 0x00 for floppy, 0x80 for hard
+
+		# Used by WinNT, other software should set to 0 when creating
+		("BS_Reserved1",   c_ubyte),
+
+		("BS_BootSig",     c_ubyte),      # 0x29 means the following 3 fields are present
+		("BS_VolID",       c_uint32),
+		("BS_VolLab",      c_ubyte * 11), # should match volume dir entry in \. "NO NAME    " if not set
+
+		# not actually used in FAT type determination, but should be one of
+		# "FAT12   ", "FAT16   ", "FAT     "
+		("BS_FilSysType",  c_ubyte * 8)
+	]
+
+
+class _BiosParameterBlock32(LittleEndianStructure):
+	_pack_ = 1
+	_fields_ = [
+		("BPB_FATSz32",    c_uint32),
+		("BPB_ExtFlags",   c_uint16),     # See docs, but nothing to validate probably
+		("BPB_FSVer",      c_uint16),     # Version 0 seems to be the highest defined
+		("BPB_RootClus",   c_uint32),     # Should be 2, but not required
+		("BPB_FSInfo",     c_uint16),
+		("BPB_BkBootSec",  c_uint16),     # Should be 6
+		("BPB_Reserved",   c_ubyte * 12), # Should be all \0
+
+		# Following are same as in BiosParameterBlock16, just different offsets
+		("BS_DrvNum",      c_ubyte),
+		("BS_Reserved1",   c_ubyte),
+		("BS_BootSig",     c_ubyte),
+		("BS_VolID",       c_uint32),
+		("BS_VolLab",      c_ubyte * 11),
+
+		# Should be "FAT32   " but as in BiosParameterBlock16, not actually
+		# used in type determination
+		("BS_FilSysType",  c_ubyte * 8)
+	]
+
+
+class _BiosParameterBlockUnion(Union):
+	_fields_ = [
+		("fat16", _BiosParameterBlock16),
+		("fat32", _BiosParameterBlock32)
+	]
+
+
+class BiosParameterBlock(LittleEndianStructure):
+	_pack_ = 1
+	_anonymous_ = ("bpbex",)
+	_fields_ = [
+		("BS_jmpBoot",     c_ubyte * 3),  # \xeb.\x90|\xe9..
+		("BS_OEMName",     c_ubyte * 8),  # informational only. "MSWIN4.1" recommended
+		("BPB_BytsPerSec", c_uint16),     # 2^n where 9 <= n <= 12
+		("BPB_SecPerClus", c_ubyte),      # 2^n where 0 <= n <= 7, BPB_BytsPerSec * BPB_SecPerClus <= 32*1024
+		("BPB_RsvdSecCnt", c_uint16),     # > 0, FAT12 and FAT16 must be 1, FAT32 often 32
+		("BPB_NumFATs",    c_ubyte),      # Should be 2
 
 		# This field * 32 must be an even multiple of BPB_BytsPerSec
 		# i.e. Root entry count must not partially fill a sector
 		# (entries are 32 bytes each)
 		# Must be 0 on FAT32
 		# FAT16 recommended to be 512
-		("H",   "BPB_RootEntCnt"),
+		("BPB_RootEntCnt", c_uint16),
 
 		# If 0, then see BOB_TotSec32. Otherwise use this value and 
 		# BPB_TotSec32 must be 0. Must be 0 on FAT32.
 		# Can be less than the total # of sectors on disk. Must never be greater
-		("H",   "BPB_TotSec16"),
+		("BPB_TotSec16",   c_uint16),
 
 		# 0xF0, 0xF8-0xFF. Should equal FAT[0]. 0xF0 for removable media,
 		# 0xF8 for non-removable
-		("B",   "BPB_Media"),
+		("BPB_Media",      c_ubyte),
 
-		("H",   "BPB_FATSz16"), # must be 0 on FAT32, in which case see BPB_FATSz32
-		("H",   "BPB_SecPerTrk"), # check against MediaGeometry
-		("H",   "BPB_NumHeads"),  # check against MediaGeometry
-		("I",   "BPB_HiddSec"),   # 0 on non-partitioned disks, like floppies
-		("I",   "BPB_TotSec32")
-	]
-
-
-class BiosParameterBlock16(NamedStruct): # also used for FAT12
-	endian = "little"
-	fields = [
-		("B",   "BS_DrvNum"),  # 0x00 for floppy, 0x80 for hard
-
-		# Used by WinNT, other software should set to 0 when creating
-		("B",   "BS_Reserved1"),
-
-		("B",   "BS_BootSig"), # 0x29 means the following 3 fields are present
-		("I",   "BS_VolID"),
-		("11s", "BS_VolLab"), # should match volume dir entry in \. "NO NAME    " if not set
-
-		# not actually used in FAT type determination, but should be one of
-		# "FAT12   ", "FAT16   ", "FAT     "
-		("8s",  "BS_FilSysType")
-	]
-
-
-class BiosParameterBlock32(NamedStruct):
-	endian = "little"
-	fields = [
-		("I",   "BPB_FATSz32"),
-		("H",   "BPB_ExtFlags"), # See docs, but nothing to validate probably
-		("H",   "BPB_FSVer"),    # Version 0 seems to be the highest defined
-		("I",   "BPB_RootClus"), # Should be 2, but not required
-		("H",   "BPB_FSInfo"),
-		("H",   "BPB_BkBootSec"), # Should be 6
-		("12s", "BPB_Reserved"), # Should be all \0
-
-		# Following are same as in BiosParameterBlock16, just different offsets
-		("B",   "BS_DrvNum"),
-		("B",   "BS_Reserved1"),
-		("B",   "BS_BootSig"),
-		("I",   "BS_VolID"),
-		("11s", "BS_VolLab"),
-
-		# Should be "FAT32   " but as in BiosParameterBlock16, not actually
-		# used in type determination
-		("8s",  "BS_FilSysType")
+		("BPB_FATSz16",    c_uint16),     # must be 0 on FAT32, in which case see BPB_FATSz32
+		("BPB_SecPerTrk",  c_uint16),     # check against MediaGeometry
+		("BPB_NumHeads",   c_uint16),     # check against MediaGeometry
+		("BPB_HiddSec",    c_uint32),     # 0 on non-partitioned disks, like floppies
+		("BPB_TotSec32",   c_uint32),
+		("bpbex",          _BiosParameterBlockUnion)
 	]
 
 
@@ -141,8 +149,6 @@ class FATVolume(object):
 		self._stream = stream
 		self._geometry = geometry
 		self._bpb = None
-		self._bpb16 = None
-		self._bpb32 = None
 
 		# mirror the value we want to use in here. maybe take it from geometry,
 		# maybe use what we read from the boot sector.
@@ -169,7 +175,7 @@ class FATVolume(object):
 
 	def get_info(self):
 		b = self._bpb
-		bx = self.fat_type == TYPE_FAT32 and self._bpb32 or self._bpb16
+		bx = self.fat_type == TYPE_FAT32 and b.fat32 or b.fat16
 
 		return _VolumeInfo(
 			self.fat_type,
@@ -201,7 +207,7 @@ class FATVolume(object):
 
 	def _open_root_dir(self):
 		if self.fat_type == TYPE_FAT32:
-			return self._open_cluster_chain(self._bpb32.BPB_RootClus)
+			return self._open_cluster_chain(self._bpb.fat32.BPB_RootClus)
 		else:
 			return self._open_sector_run(self._root_dir_sector_start, self._root_dir_sector_count)
 
@@ -240,13 +246,8 @@ class FATVolume(object):
 	def _init_bpb(self):
 		self._seek_sector(0)
 
-		self._bpb = BiosParameterBlock.from_stream(self._stream)
-
-		bpbx_union = self._read(max(
-			BiosParameterBlock16.size(), BiosParameterBlock32.size()))
-
-		self._bpb16 = BiosParameterBlock16(bpbx_union[:BiosParameterBlock16.size()])
-		self._bpb32 = BiosParameterBlock32(bpbx_union[:BiosParameterBlock32.size()])
+		bpbbuf = self._read(sizeof(BiosParameterBlock))
+		self._bpb = BiosParameterBlock.from_buffer_copy(bpbbuf)
 
 	def _init_calcs(self):
 		# you could use self._bpb.BPB_BytsPerSec
@@ -280,7 +281,7 @@ class FATVolume(object):
 	def _calc_fat_sector_count(self):
 		if self._bpb.BPB_FATSz16 != 0:
 			return self._bpb.BPB_FATSz16
-		return self._bpb32.BPB_FATSz32
+		return self._bpb.fat32.BPB_FATSz32
 
 	def _calc_root_dir_sector_start(self):
 		b = self._bpb

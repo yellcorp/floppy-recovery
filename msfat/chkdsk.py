@@ -1,6 +1,7 @@
 import re
 
-from msfat import TYPE_FAT12, TYPE_FAT16, TYPE_FAT32, _inline_hexdump
+from msfat import TYPE_FAT12, TYPE_FAT16, TYPE_FAT32, \
+	_inline_hexdump, _bytes_to_str
 
 
 # Log levels match values of equivalent severity in python logging module
@@ -15,7 +16,6 @@ CHKDSK_LOG_UNCOMMON = _UNCOMMON
 CHKDSK_LOG_INFO = _INFO
 
 
-_COMMON_JMPBOOT = re.compile(r"^(?:\xEB.\x90|\xE9..)$")
 _VALID_MEDIA_BYTE = (0xF0,) + tuple(xrange(0xF8, 0x100))
 _VALID_DRIVE_NUM = (0x00, 0x80)
 _FAT_TYPE_CLUSTER_COUNT_CUTOVERS = (4085, 65525)
@@ -29,16 +29,20 @@ _FAT_SIG = "\x55\xAA"
 _FAT32_MAX_ALLOWED_CLUSTER_COUNT = 0x0FFFFFF5
 
 
+def _is_common_jmpboot(bytes):
+	return (bytes[0] == 0xEB and bytes[2] == 0x90) or bytes[0] == 0xE9
+
+
 def chkdsk(volume):
 	v = volume
 	b = v._bpb
-	b16 = v._bpb16
-	b32 = v._bpb32
+	b16 = b.fat16
+	b32 = b.fat32
 
-	if _COMMON_JMPBOOT.match(b.BS_jmpBoot) is None:
+	if not _is_common_jmpboot(b.BS_jmpBoot):
 		yield (_UNCOMMON, "Uncommon BS_jmpBoot: {0}".format(_inline_hexdump(b.BS_jmpBoot)))
 
-	yield (_INFO, "BS_OEMName: {0!r}".format(b.BS_OEMName))
+	yield (_INFO, "BS_OEMName: {0!r}".format(_bytes_to_str(b.BS_OEMName)))
 
 	if b.BPB_BytsPerSec not in _VALID_BYTES_PER_SECTOR:
 		yield (_INVALID, "Invalid BPB_BytsPerSec: 0x{0:04X}".format(b.BPB_BytsPerSec))
@@ -142,7 +146,7 @@ def chkdsk(volume):
 
 def _chkdsk16(v):
 	b = v._bpb
-	b16 = v._bpb16
+	b16 = b.fat16
 
 	if b.BPB_RsvdSecCnt != 1:
 		yield (_INVALID, "Invalid BPB_RsvdSecCnt for {0}: 0x{1:04X}".format(v.fat_type, b.BPB_RsvdSecCnt))
@@ -169,7 +173,7 @@ def _chkdsk16(v):
 
 def _chkdsk32(v):
 	b = v._bpb
-	b32 = v._bpb32
+	b32 = b.fat32
 
 	if b.BPB_RsvdSecCnt == 0:
 		yield (_INVALID, "Invalid BPB_RsvdSecCnt for {0}: 0x{1:04X}".format(v.fat_type, b.BPB_RsvdSecCnt))
@@ -210,6 +214,12 @@ def _chkdsk32(v):
 		yield message
 
 
+_TYPES_TO_BSTYPE = {
+	TYPE_FAT32: ("FAT32   ",),
+	TYPE_FAT16: ("FAT16   ", "FAT     "),
+	TYPE_FAT12: ("FAT12   ", "FAT     ")
+}
+
 def _chkdsk_bpbx_common(v, bx):
 	if bx.BS_DrvNum not in _VALID_DRIVE_NUM:
 		yield (_INVALID, "Invalid BS_DrvNum: 0x{0:02X}".format(bx.BS_DrvNum))
@@ -224,20 +234,11 @@ def _chkdsk_bpbx_common(v, bx):
 
 	# TODO: check bx.BS_VolLab against what the root dir thinks it is
 	yield (_INFO, "BS_VolID is 0x{0:08X}".format(bx.BS_VolID))
-	yield (_INFO, "BS_VolLab is {0!r}".format(bx.BS_VolLab))
+	yield (_INFO, "BS_VolLab is {0!r}".format(_bytes_to_str(bx.BS_VolLab)))
 
-	fstype_ok = False
-	if v.fat_type == TYPE_FAT32:
-		fstype_ok = bx.BS_FilSysType == "FAT32   "
-	elif bx.BS_FilSysType == "FAT     ":
-		fstype_ok = True
-	elif v.fat_type == TYPE_FAT16:
-		fstype_ok = bx.BS_FilSysType == "FAT16   "
-	else:
-		fstype_ok = bx.BS_FilSysType == "FAT12   "
-
-	if not fstype_ok:
-		yield (_bs_level, "BS_FilSysType doesn't match determined filesystem type of {0}: {1!r}".format(v.fat_type, bx.BS_FilSysType))
+	fstype_str = _bytes_to_str(bx.BS_FilSysType)
+	if fstype_str not in _TYPES_TO_BSTYPE[v.fat_type]:
+		yield (_bs_level, "BS_FilSysType doesn't match determined filesystem type of {0}: {1!r}".format(v.fat_type, fstype_str))
 
 
 def _chkdsk_fat(v):
