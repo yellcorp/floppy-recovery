@@ -201,7 +201,7 @@ def _chkdsk32(v):
 		yield (_UNCOMMON, "Uncommon BPB_BkBootSec: 0x{0:08X}".format(b32.BPB_BkBootSec))
 
 	if b32.BPB_Reserved != '\0' * 12:
-		yield (_UNCOMMON, "Non-zero bytes in BPB_Reserved: {0!r}".format(_inline_hexdump(b32.BPB_Reserved)))
+		yield (_UNCOMMON, "Non-zero bytes in BPB_Reserved: {0}".format(_inline_hexdump(b32.BPB_Reserved)))
 
 	if v._cluster_count > _FAT32_MAX_ALLOWED_CLUSTER_COUNT:
 		yield (_INVALID, "Cluster count exceeds maximum allowed for {0}: 0x{1:08X} > 0x{2:08X}".format(v.fat_type, v._cluster_count, _FAT32_MAX_ALLOWED_CLUSTER_COUNT))
