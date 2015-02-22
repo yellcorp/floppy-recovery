@@ -14,5 +14,9 @@ ATTR_LONG_NAME_MASK = ATTR_READ_ONLY | ATTR_HIDDEN | ATTR_SYSTEM | ATTR_VOLUME_I
 ATTR_RESERVED_MASK =  0xC0
 
 
-def _inline_hexdump(string):
-	return " ".join("{0:02X}".format(ord(c)) for c in string)
+def _inline_hexdump(thing):
+	if isinstance(thing, basestring):
+		iterable = (ord(c) for c in thing)
+	else:
+		iterable = thing
+	return " ".join("{0:02X}".format(n) for n in iterable)
