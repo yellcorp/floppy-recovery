@@ -147,6 +147,30 @@ class FATDirEntry(Union):
 	def long_name_ordinal(self):
 		return self.LDIR_Ord & _LONG_ENTRY_ORD_MASK
 
+	def is_read_only(self):
+		return self.DIR_Attr & ATTR_READ_ONLY != 0
+
+	def is_hidden(self):
+		return self.DIR_Attr & ATTR_HIDDEN != 0
+
+	def is_system(self):
+		return self.DIR_Attr & ATTR_SYSTEM != 0
+
+	def is_volume_id(self):
+		return self.DIR_Attr & ATTR_VOLUME_ID != 0
+
+	def is_directory(self):
+		return self.DIR_Attr & ATTR_DIRECTORY != 0
+
+	def is_archive(self):
+		return self.DIR_Attr & ATTR_ARCHIVE != 0
+
+	def start_cluster(self):
+		return (
+			(self.DIR_FstClusHI << 16) |
+			self.DIR_FstClusLO
+		)
+
 
 class FATAggregateDirEntry(object):
 	def __init__(self, short_entry, long_name=None):
@@ -170,33 +194,15 @@ class FATAggregateDirEntry(object):
 			return prefix + "." + suffix
 		return prefix
 
-	def is_read_only(self):
-		return self.short_entry.DIR_Attr & ATTR_READ_ONLY != 0
-
-	def is_hidden(self):
-		return self.short_entry.DIR_Attr & ATTR_HIDDEN != 0
-
-	def is_system(self):
-		return self.short_entry.DIR_Attr & ATTR_SYSTEM != 0
-
-	def is_volume_id(self):
-		return self.short_entry.DIR_Attr & ATTR_VOLUME_ID != 0
-
-	def is_directory(self):
-		return self.short_entry.DIR_Attr & ATTR_DIRECTORY != 0
-
-	def is_archive(self):
-		return self.short_entry.DIR_Attr & ATTR_ARCHIVE != 0
-
 	def attr_string(self):
 		return "".join(
 			(b and ch or "-") for ch, b in [
-				("A", self.is_archive()),
-				("D", self.is_directory()),
-				("V", self.is_volume_id()),
-				("S", self.is_system()),
-				("H", self.is_hidden()),
-				("R", self.is_read_only())
+				("A", self.short_entry.is_archive()),
+				("D", self.short_entry.is_directory()),
+				("V", self.short_entry.is_volume_id()),
+				("S", self.short_entry.is_system()),
+				("H", self.short_entry.is_hidden()),
+				("R", self.short_entry.is_read_only())
 			]
 		)
 
@@ -215,10 +221,7 @@ class FATAggregateDirEntry(object):
 		)
 
 	def start_cluster(self):
-		return (
-			(self.short_entry.DIR_FstClusHI << 16) |
-			self.short_entry.DIR_FstClusLO
-		)
+		return self.short_entry.start_cluster()
 
 	def write_time(self, timezone=None):
 		return fat_time_to_unix(
@@ -290,16 +293,15 @@ def read_dir(stream):
 		elif entry.is_long_name_segment():
 			if len(long_entries) == 0:
 				long_entries.append(entry)
+			elif entry.is_final_long_name_segment():
+				# begins a new entry
+				long_entries = [ entry ]
+			elif _can_append_long_entry(long_entries[-1], entry):
+				long_entries.append(entry)
 			else:
-				if entry.is_final_long_name_segment():
-					# begins a new entry
-					long_entries = [ entry ]
-				elif _can_append_long_entry(long_entries[-1], entry):
-					long_entries.append(entry)
-				else:
-					# it's not the last in a new sequence, it's not part of
-					# this one. what is it? dunno
-					long_entries = [ ]
+				# it's not the last in a new sequence, it's not part of
+				# this one. what is it? dunno
+				long_entries = [ ]
 		else:
 			long_name = None
 			# we should have hit long entry 1 (they're 1-based to prevent 0s
