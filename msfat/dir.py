@@ -170,12 +170,6 @@ class FATAggregateDirEntry(object):
 			return prefix + "." + suffix
 		return prefix
 
-	def is_free_entry(self):
-		return self.short_entry.is_free_entry()
-
-	def is_last_in_dir(self):
-		return self.short_entry.is_last_in_dir()
-
 	def is_read_only(self):
 		return self.short_entry.DIR_Attr & ATTR_READ_ONLY != 0
 
