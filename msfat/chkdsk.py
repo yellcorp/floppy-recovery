@@ -84,13 +84,30 @@ class _ChkDskFormatter(string.Formatter):
 			return string.Formatter.convert_field(self, value, conversion)
 
 
-class _ChkDskLogger(object):
-	def __init__(self, user_log_func, **kwargs):
-		self._user_log_func = user_log_func
+class _BaseLogger(object):
+	def __init__(self, next_log_func):
+		self._next_log_func = next_log_func
+
+	def log(self, level, *args, **kwargs):
+		self._next_log_func(level, *args, **kwargs)
+
+	def info(self, *args, **kwargs):
+		self.log(_INFO, *args, **kwargs)
+
+	def uncommon(self, *args, **kwargs):
+		self.log(_UNCOMMON, *args, **kwargs)
+
+	def invalid(self, *args, **kwargs):
+		self.log(_INVALID, *args, **kwargs)
+
+
+
+class _ChkDskLogger(_BaseLogger):
+	def __init__(self, next_log_func, **kwargs):
+		_BaseLogger.__init__(self, next_log_func)
+
 		self._default_format_dict = kwargs
 		self._formatter = _ChkDskFormatter()
-
-		self.leveled_log_funcs = (self.info, self.uncommon, self.invalid)
 
 	def log(self, level, template, *args, **kwargs):
 		# slow but whatever
@@ -100,16 +117,24 @@ class _ChkDskLogger(object):
 			format_dict = self._default_format_dict
 
 		message = self._formatter.vformat(template, args, format_dict)
-		self._user_log_func(level, re.sub("\s+", " ", message.strip()))
+		_BaseLogger.log(self, level, re.sub("\s+", " ", message.strip()))
 
-	def info(self, template, *args, **kwargs):
-		self.log(_INFO, template, *args, **kwargs)
 
-	def uncommon(self, template, *args, **kwargs):
-		self.log(_UNCOMMON, template, *args, **kwargs)
+class _PrefixLogger(_BaseLogger):
+	@staticmethod
+	def template_escape(s):
+		return re.sub(r"[{}]", lambda m: m.group(0) * 2, s)
 
-	def invalid(self, template, *args, **kwargs):
-		self.log(_INVALID, template, *args, **kwargs)
+	def __init__(self, next_log_func, prefix):
+		_BaseLogger.__init__(self, next_log_func)
+		self.prefix = prefix
+		self._escaped_prefix = self.template_escape(prefix)
+
+	def log(self, level, template, *args, **kwargs):
+		_BaseLogger.log(self, level, self._escaped_prefix + template, *args, **kwargs)
+
+	def extend(self, prefix_extra):
+		return _PrefixLogger(self._next_log_func, self.prefix + prefix_extra)
 
 
 class _NamedValue(object):
@@ -191,6 +216,7 @@ class _ChkDsk(object):
 		self._check_sig()
 		self._check_fat_size()
 		self._check_fats()
+		self._chkdsk_dir("\\", self.volume._open_root_dir(), None, None, True)
 
 
 	def _check_common(self):
@@ -515,3 +541,226 @@ class _ChkDsk(object):
 
 		if nonzeroes > 0:
 			self.log.info("FAT[{volume.active_fat_index}] has non-zero data in its unused area")
+
+
+	def _chkdsk_dir(self, dir_name, stream, dir_cluster, parent_cluster, allow_vol):
+		log = _PrefixLogger(self.log.log, u"In dir {0}: ".format(dir_name))
+
+		long_entries = [ ]
+		seen_names = set()
+		seen_vol = False
+
+		def dispose_lfns(reason, *args, **kwargs):
+			if len(long_entries) > 0:
+				log.info(u"Orphaned LFN sequence {lfn}: {reason}",
+					lfn=assemble_long_entries(long_entries),
+					reason=reason,
+					*args, **kwargs
+				)
+				long_entries[:] = [ ]
+
+		while True:
+			bytes = stream.read(sizeof(FATDirEntry))
+			if len(bytes) == 0:
+				log.invalid("Reached end of directory without seeing end marker")
+				return
+
+			entry = FATDirEntry.from_buffer_copy(bytes)
+			if entry.is_last_in_dir():
+				dispose_lfns("End of directory reached")
+
+				if bytes != _NULL_DIR_ENTRY:
+					log.info("End of dir has non-null data: {name!b}", name=entry.DIR_Name)
+
+				_chkdsk_dir_trail(log, stream)
+				return
+
+			elif entry.is_free_entry():
+				dispose_lfns("Free short entry")
+				log.info("Free entry: {name!b}", name=entry.DIR_Name)
+
+			elif entry.is_long_name_segment():
+				# TODO: check that fields that should be zero, are
+
+				if entry.is_final_long_name_segment():
+					dispose_lfns("Sequence reset")
+					long_entries = [ entry ]
+
+				elif len(long_entries) == 0:
+					log.info(u"Orphaned LFN sequence {lfn}: No final bit",
+						lfn=assemble_long_entries([ entry ])
+					)
+
+				elif entry.long_name_ordinal() + 1 != long_entries[-1].long_name_ordinal():
+					dispose_lfns(u"Non sequential segment {segment}",
+						segment=entry.long_name_segment()
+					)
+
+				elif entry.LDIR_Chksum != long_entries[-1].LDIR_Chksum:
+					dispose_lfns(u"Checksum mismatch in segment {segment}",
+						segment=entry.long_name_segment()
+					)
+
+				else:
+					long_entries.append(entry)
+
+			else:
+				if len(long_entries) > 0:
+					if long_entries[-1].long_name_ordinal() != 1:
+						dispose_lfns("Incomplete sequence")
+
+					elif long_entries[-1].LDIR_Chksum != entry.short_name_checksum():
+						dispose_lfns("Checksum mismatch against short name {sfn!b}",
+							sfn=entry.DIR_Name
+						)
+
+				long_name = None
+				if len(long_entries) > 0:
+					long_name = assemble_long_entries(long_entries)
+
+				if long_name is not None:
+					if not is_valid_long_name(long_name):
+						log.invalid(u"Long filename {lfn} is not valid", lfn=long_name)
+
+					if not is_long_name_correctly_padded(long_name):
+						log.uncommon(u"Long filename {lfn} is not correctly padded", lfn=long_name)
+
+					if long_name.lower() in seen_names:
+						log.invalid(u"Long filename {lfn} occurs more than once", lfn=long_name)
+					else:
+						seen_names.add(long_name.lower())
+
+				short_name = _bytes_to_str(entry.DIR_Name)
+				if not is_valid_short_name(short_name):
+					log.invalid("Short filename {sfn!r} is not valid", sfn=short_name)
+
+				if short_name.lower() in seen_names:
+					log.invalid("Short filename {sfn!r} occurs more than once", sfn=short_name)
+				else:
+					seen_names.add(short_name.lower())
+
+				if entry.DIR_Attr & ATTR_VOLUME_ID:
+					if not allow_vol:
+						log.invalid("Volume id {sfn!r} not allowed in this directory", sfn=short_name)
+					elif seen_vol:
+						log.invalid("Extra volume id {sfn!r}", sfn=short_name)
+					else:
+						seen_vol = True
+					if entry.DIR_Attr & ATTR_VALID_MASK & (~ATTR_VOLUME_ID):
+						log.invalid("Volume id {sfn!r} has non-volume attribute bits set", sfn=short_name)
+
+				filename = long_name is None and repr(short_name) or long_name
+				fnlog = log.extend(" {0} ".format(filename))
+				if entry.DIR_Attr & ATTR_RESERVED_MASK:
+					fnlog.uncommon("has reserved attribute bits set")
+
+				if entry.DIR_NTRes != 0:
+					fnlog.uncommon("has non-zero DIR_NTRes ({val:#04x})", val=entry.DIR_NTRes)
+
+				if entry.DIR_CrtTimeTenth > 200:
+					fnlog.uncommon("DIR_CrtTimeTenth out of range ({val})", val=entry.DIR_CrtTimeTenth)
+
+				for date_field, can_be_zero in (("DIR_CrtDate", True), ("DIR_LstAccDate", True), ("DIR_WrtDate", False)):
+					_chkdsk_direntry_date(fnlog, date_field, getattr(entry, date_field), can_be_zero)
+
+				for time_field in ("DIR_CrtTime", "DIR_WrtTime"):
+					_chkdsk_direntry_time(fnlog, time_field, getattr(entry, time_field))
+
+				if entry.is_directory():
+					if entry.DIR_FileSize != 0:
+						fnlog.invalid("is a directory with non-zero file size")
+
+					if entry.start_cluster == 0:
+						fnlog.invalid("is a directory with zero start cluster")
+
+				elif entry.is_volume_id():
+					if long_name is not None:
+						log.uncommon("Volume label {short!b} has an associated long filename {long}",
+							short=entry.DIR_Name, long=long_name)
+
+					if entry.DIR_FileSize != 0:
+						fnlog.invalid("is a volume id with non-zero file size")
+
+					if entry.start_cluster != 0:
+						fnlog.invalid("is a volume id with non-zero start cluster")
+
+				else:
+					if entry.DIR_FileSize == 0 and entry.start_cluster != 0:
+						fnlog.invalid("is a zero-length file with non-zero start cluster")
+					elif entry.DIR_FileSize != 0 and entry.start_cluster == 0:
+						fnlog.invalid("is a nonzero-length file with zero start cluster")
+
+				if entry.start_cluster() != 0 and not self.volume._is_valid_cluster_num(entry.start_cluster()):
+					fnlog.invalid("starts at invalid cluster number {cluster_num:#010x}",
+						cluster_num=entry.start_cluster()
+					)
+
+				if dir_cluster is not None:
+					_chkdsk_metadir(log, entry, long_name, THISDIR_NAME, dir_cluster)
+					dir_cluster = None
+
+				elif parent_cluster is not None:
+					_chkdsk_metadir(log, entry, long_name, UPDIR_NAME, parent_cluster)
+					parent_cluster = None
+
+
+def _chkdsk_dir_trail(log, stream):
+	while True:
+		bytes = stream.read(sizeof(FATDirEntry))
+		if len(bytes) == 0:
+			return
+		if bytes != _NULL_DIR_ENTRY:
+			entry = FATDirEntry.from_buffer_copy(bytes)
+			log.info("Trailing entry: {name!b}", name=entry.DIR_Name)
+
+
+def _chkdsk_direntry_date(log, attr_name, value, can_be_zero):
+	if can_be_zero and value == 0:
+		return
+
+	year, month, day = unpack_fat_date(value)
+	if 1 <= month <= 12:
+		if day == 0 or day == 32:
+			log.invalid("{attr_name} has invalid day: {day}", attr_name=attr_name, day=day)
+		else:
+			_, days_in_month = calendar.monthrange(year, month)
+			if day > days_in_month:
+				log.invalid("{attr_name} has invalid day for {month}/{year}: {day}",
+					attr_name=attr_name, year=year, month=month, day=day)
+	else:
+		log.invalid("{attr_name} has invalid month: {month}", attr_name=attr_name, month=month)
+
+
+def _chkdsk_direntry_time(log, attr_name, value):
+	hours, minutes, seconds = unpack_fat_time(value)
+	for unit_name, unit_value, unit_max in (
+		("hours",   hours,   23),
+		("minutes", minutes, 59),
+		("seconds", seconds, 59)
+	):
+		if unit_value > unit_max:
+			log.invalid("{attr_name} has invalid {unit_name}: {unit_value}",
+				attr_name=attr_name, unit_name=unit_name, unit_value=unit_value
+			)
+
+
+def _chkdsk_metadir(log, entry, long_name, expect_name, expect_cluster):
+	name = _bytes_to_str(entry.DIR_Name)
+	dirlog = log.extend("Metadir {0!r} ".format(expect_name))
+
+	if name != expect_name:
+		dirlog.invalid("not present at expected location")
+
+	if long_name is not None:
+		dirlog.uncommon("has an associated long filename: {long_name}",
+			long_name=long_name)
+
+	if not entry.is_directory():
+		log.invalid("directory bit is not set")
+
+	if entry.start_cluster() != expect_cluster:
+		log.invalid("""is incorrectly linked. Expected cluster
+			{expect:#010x}, but is {got:#010x}""",
+			expect=expect_cluster,
+			got=entr.start_cluster()
+		)

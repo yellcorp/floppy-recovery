@@ -4,9 +4,9 @@ import os.path
 import sys
 
 import disklib.mediageom
+import disklib.validity
 import msfat.chkdsk
 import msfat.volume
-import disklib.validity
 
 
 LOGLEVEL_TO_PREFIX = {
