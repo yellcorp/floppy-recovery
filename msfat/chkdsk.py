@@ -117,7 +117,7 @@ class _ChkDskLogger(_BaseLogger):
 			format_dict = self._default_format_dict
 
 		message = self._formatter.vformat(template, args, format_dict)
-		_BaseLogger.log(self, level, re.sub("\s+", " ", message.strip()))
+		_BaseLogger.log(self, level, re.sub("[\r\n\t]+", " ", message.strip()))
 
 
 class _PrefixLogger(_BaseLogger):
@@ -233,7 +233,7 @@ class _ChkDsk(object):
 
 		_check_eq(
 			_NamedValue("BPB_BytsPerSec", self.bpb.BPB_BytsPerSec, _FMT_U16),
-			_NamedValue("geometry.sector_size", self.geometry.sector_size, _FMT_U16),
+			_NamedValue("Geometry bytes per sector", self.geometry.sector_size, _FMT_U16),
 			self.log.invalid
 		)
 
@@ -544,6 +544,7 @@ class _ChkDsk(object):
 
 
 	def _chkdsk_dir(self, dir_name, stream, dir_cluster, parent_cluster, allow_vol):
+		# TODO: like clusters, check dirs for cyclical and cross-linked pointers
 		log = _PrefixLogger(self.log.log, u"In dir {0}: ".format(dir_name))
 
 		long_entries = [ ]
@@ -552,9 +553,8 @@ class _ChkDsk(object):
 
 		def dispose_lfns(reason, *args, **kwargs):
 			if len(long_entries) > 0:
-				log.info(u"Orphaned LFN sequence {lfn}: {reason}",
+				log.info(u"Orphaned LFN {lfn}: " + reason,
 					lfn=assemble_long_entries(long_entries),
-					reason=reason,
 					*args, **kwargs
 				)
 				long_entries[:] = [ ]
@@ -617,6 +617,7 @@ class _ChkDsk(object):
 				long_name = None
 				if len(long_entries) > 0:
 					long_name = assemble_long_entries(long_entries)
+					long_entries = [ ]
 
 				if long_name is not None:
 					if not is_valid_long_name(long_name):
@@ -650,7 +651,7 @@ class _ChkDsk(object):
 						log.invalid("Volume id {sfn!r} has non-volume attribute bits set", sfn=short_name)
 
 				filename = long_name is None and repr(short_name) or long_name
-				fnlog = log.extend(" {0} ".format(filename))
+				fnlog = log.extend(filename + " ")
 				if entry.DIR_Attr & ATTR_RESERVED_MASK:
 					fnlog.uncommon("has reserved attribute bits set")
 
@@ -679,10 +680,10 @@ class _ChkDsk(object):
 							short=entry.DIR_Name, long=long_name)
 
 					if entry.DIR_FileSize != 0:
-						fnlog.invalid("is a volume id with non-zero file size")
+						fnlog.uncommon("is a volume id with non-zero file size")
 
 					if entry.start_cluster != 0:
-						fnlog.invalid("is a volume id with non-zero start cluster")
+						fnlog.uncommon("is a volume id with non-zero start cluster")
 
 				else:
 					if entry.DIR_FileSize == 0 and entry.start_cluster != 0:
@@ -691,7 +692,7 @@ class _ChkDsk(object):
 						fnlog.invalid("is a nonzero-length file with zero start cluster")
 
 				if entry.start_cluster() != 0 and not self.volume._is_valid_cluster_num(entry.start_cluster()):
-					fnlog.invalid("starts at invalid cluster number {cluster_num:#010x}",
+					fnlog.invalid("points to invalid cluster number {cluster_num:#010x}",
 						cluster_num=entry.start_cluster()
 					)
 
