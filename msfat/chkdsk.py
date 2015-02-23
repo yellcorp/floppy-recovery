@@ -68,6 +68,17 @@ _TYPES_TO_XBSTYPE = {
 _BS_LABEL_NO_NAME = "{0:11s}".format("NO NAME")
 
 
+# TODO:
+## check LFN fields that should be zero, are
+## check FAT for unreferenced but occupied clusters
+## check for cyclical cluster chains
+## check for cross-linked cluster chains
+## check for cyclical directory links
+## check for cross-linked directories
+## check truncated chains (EOC, free or bad)
+## check overlong chains
+
+
 def chkdsk(volume, user_log_func):
 	_ChkDsk(volume, user_log_func).run()
 
@@ -545,7 +556,6 @@ class _ChkDsk(object):
 
 
 	def _chkdsk_dir(self, dir_name, stream, dir_cluster, parent_cluster, allow_vol):
-		# TODO: like clusters, check dirs for cyclical and cross-linked pointers
 		log = _PrefixLogger(self.log.log, u"In dir {0}: ".format(dir_name))
 
 		long_entries = [ ]
@@ -588,8 +598,6 @@ class _ChkDsk(object):
 				log.info("Free entry: {name!b}", name=entry.DIR_Name)
 
 			elif entry.is_long_name_segment():
-				# TODO: check that fields that should be zero, are
-
 				if entry.is_final_long_name_segment():
 					dispose_lfns("Sequence reset")
 					long_entries = [ entry ]
