@@ -65,6 +65,8 @@ _TYPES_TO_XBSTYPE = {
 	TYPE_FAT12: ("FAT12   ", "FAT     ")
 }
 
+_BS_LABEL_NO_NAME = "{0:11s}".format("NO NAME")
+
 
 def chkdsk(volume, user_log_func):
 	_ChkDsk(volume, user_log_func).run()
@@ -415,7 +417,6 @@ class _ChkDsk(object):
 			self.log.info("BS_VolID, BS_VolLab, BS_FilSysType not present")
 			xbs_log_func = self.log.info
 
-		# TODO: check self.bpbx.BS_VolLab against what the root dir thinks it is
 		self.log.info("BS_VolID is {bpbx.BS_VolID:#010x}")
 		self.log.info("BS_VolLab is {bpbx.BS_VolLab!b}")
 
@@ -569,6 +570,13 @@ class _ChkDsk(object):
 			if entry.is_last_in_dir():
 				dispose_lfns("End of directory reached")
 
+				if (
+					self.bpbx.BS_BootSig == _EXT_BOOTSIG and
+					_bytes_to_str(self.bpbx.BS_VolLab) != _BS_LABEL_NO_NAME and 
+					allow_vol and not seen_vol
+				):
+					log.uncommon("BS_VolLab is set ({bpbx.BS_VolLab!b}) but no volume id directory entry present")
+
 				if bytes != _NULL_DIR_ENTRY:
 					log.info("End of dir has non-null data: {name!b}", name=entry.DIR_Name)
 
@@ -640,12 +648,14 @@ class _ChkDsk(object):
 				else:
 					seen_names.add(short_name.lower())
 
-				if entry.DIR_Attr & ATTR_VOLUME_ID:
+				if entry.is_volume_id():
 					if not allow_vol:
 						log.invalid("Volume id {sfn!r} not allowed in this directory", sfn=short_name)
 					elif seen_vol:
 						log.invalid("Extra volume id {sfn!r}", sfn=short_name)
 					else:
+						if self.bpbx.BS_BootSig == _EXT_BOOTSIG and short_name != _bytes_to_str(self.bpbx.BS_VolLab):
+							log.uncommon("Volume id {sfn!r} doesn't match BS_VolLab {bpbx.BS_VolLab!b}", sfn=short_name)
 						seen_vol = True
 					if entry.DIR_Attr & ATTR_VALID_MASK & (~ATTR_VOLUME_ID):
 						log.invalid("Volume id {sfn!r} has non-volume attribute bits set", sfn=short_name)
