@@ -1,5 +1,6 @@
 #!/usr/local/bin/python
 
+import os.path
 import sys
 
 import disklib.mediageom
@@ -15,6 +16,10 @@ LOGLEVEL_TO_PREFIX = {
 }
 
 
+def log(level, message):
+	print LOGLEVEL_TO_PREFIX[level] + message
+
+
 def main():
 	prog_errs = [ ]
 
@@ -27,13 +32,14 @@ def main():
 			geometry = disklib.mediageom.DiskGeometry.from_image_size(validity.domain)
 
 			volume = msfat.volume.FATVolume(stream, geometry)
-			for level, message in volume.chkdsk():
-				print LOGLEVEL_TO_PREFIX.get(level, "") + message
+			volume.chkdsk(log)
 
 			stream.close()
 		except Exception as e:
-			print u"{0}Program error: {1}".format(
-				LOGLEVEL_TO_PREFIX[msfat.chkdsk.CHKDSK_LOG_INVALID], e)
+			log(
+				msfat.chkdsk.CHKDSK_LOG_INVALID,
+				"Program error: {0!s}".format(e)
+			)
 			prog_errs.append((path, e))
 		print ""
 

@@ -188,9 +188,8 @@ class FATVolume(object):
 		)
 
 
-	def chkdsk(self):
-		for m in chkdsk(self):
-			yield m
+	def chkdsk(self, user_log_func):
+		chkdsk(self, user_log_func)
 
 
 	def _open_root_dir(self):
