@@ -1,18 +1,23 @@
 #!/usr/local/bin/python
 
+import os.path
 import sys
 
 import disklib.mediageom
+import disklib.validity
 import msfat.chkdsk
 import msfat.volume
-import disklib.validity
 
 
 LOGLEVEL_TO_PREFIX = {
-	msfat.chkdsk.CHKDSK_LOG_INVALID:  u'X ',
-	msfat.chkdsk.CHKDSK_LOG_UNCOMMON: u'! ',
-	msfat.chkdsk.CHKDSK_LOG_INFO:     u'i ' 
+	msfat.chkdsk.CHKDSK_LOG_INVALID:  u'\u274c  ', # cross
+	msfat.chkdsk.CHKDSK_LOG_UNCOMMON: u'\u26a0\ufe0f  ', # warning sign with emoji variant suffix
+	msfat.chkdsk.CHKDSK_LOG_INFO:     u'\u2139\ufe0f  '  # INFORMATION SOURCE with emoji variant suffix
 }
+
+
+def log(level, message):
+	print LOGLEVEL_TO_PREFIX[level] + message
 
 
 def main():
@@ -27,13 +32,14 @@ def main():
 			geometry = disklib.mediageom.DiskGeometry.from_image_size(validity.domain)
 
 			volume = msfat.volume.FATVolume(stream, geometry)
-			for level, message in volume.chkdsk():
-				print LOGLEVEL_TO_PREFIX.get(level, "") + message
+			volume.chkdsk(log)
 
 			stream.close()
 		except Exception as e:
-			print u"{0}Program error: {1}".format(
-				LOGLEVEL_TO_PREFIX[msfat.chkdsk.CHKDSK_LOG_INVALID], e)
+			log(
+				msfat.chkdsk.CHKDSK_LOG_INVALID,
+				"Program error: {0!s}".format(e)
+			)
 			prog_errs.append((path, e))
 		print ""
 
