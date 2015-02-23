@@ -10,9 +10,9 @@ import msfat.volume
 
 
 LOGLEVEL_TO_PREFIX = {
-	msfat.chkdsk.CHKDSK_LOG_INVALID:  u'X ',
-	msfat.chkdsk.CHKDSK_LOG_UNCOMMON: u'! ',
-	msfat.chkdsk.CHKDSK_LOG_INFO:     u'i ' 
+	msfat.chkdsk.CHKDSK_LOG_INVALID:  u'\u274c  ', # cross
+	msfat.chkdsk.CHKDSK_LOG_UNCOMMON: u'\u26a0\ufe0f  ', # warning sign with emoji variant suffix
+	msfat.chkdsk.CHKDSK_LOG_INFO:     u'\u2139\ufe0f  '  # INFORMATION SOURCE with emoji variant suffix
 }
 
 
