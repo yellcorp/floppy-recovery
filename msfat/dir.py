@@ -183,6 +183,28 @@ class FATDirEntry(Union):
 			self.DIR_FstClusLO
 		)
 
+	def iter_long_name_bytes(self):
+		for field in (self.LDIR_Name1, self.LDIR_Name2, self.LDIR_Name3):
+			for b in field:
+				yield b
+
+	def long_name_segment(self):
+		return bytearray(self.iter_long_name_bytes()).decode("utf_16_le")
+
+	def type_string(self):
+		if self.is_free_entry():
+			return "non-terminal free entry"
+		elif self.is_last_in_dir():
+			return "terminal free entry"
+		elif self.is_long_name_segment():
+			return "long filename segment"
+		elif self.is_volume_id():
+			return "volume id"
+		elif self.is_directory():
+			return "directory"
+		else:
+			return "file"
+
 
 class FATAggregateDirEntry(object):
 	def __init__(self, short_entry, long_name=None):
@@ -278,9 +300,7 @@ def _long_entry_set_belongs_to_short_entry(long_entries, short_entry):
 def assemble_long_entries(long_entries):
 	name_bytes = bytearray()
 	for e in reversed(long_entries):
-		name_bytes.extend(e.LDIR_Name1)
-		name_bytes.extend(e.LDIR_Name2)
-		name_bytes.extend(e.LDIR_Name3)
+		name_bytes.extend(e.iter_long_name_bytes())
 
 	# append a 16-bit null in case the last entry segment is filled exactly
 	name_bytes.extend((0, 0))
