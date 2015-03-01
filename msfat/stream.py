@@ -93,7 +93,7 @@ class ClusterChainStream(_BaseStream):
 			raise AllocationError("Premature end of chain")
 
 		new_cur = self._next_cluster
-		new_next = self._get_fat_entry(new_cur)
+		new_next = self._vol._get_fat_entry(new_cur)
 
 		if self._vol._is_bad(new_next):
 			if self.ignore_bad_clusters:
