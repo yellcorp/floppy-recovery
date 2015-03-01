@@ -717,7 +717,7 @@ class _ChkDsk(object):
 							filesize=entry.DIR_FileSize
 						)
 
-					if entry.start_cluster == 0:
+					if entry.start_cluster() == 0:
 						fnlog.invalid("is a directory with zero start cluster")
 
 				elif entry.is_volume_id():
@@ -730,17 +730,17 @@ class _ChkDsk(object):
 							filesize=entry.DIR_FileSize
 						)
 
-					if entry.start_cluster != 0:
+					if entry.start_cluster() != 0:
 						fnlog.uncommon("is a volume id with non-zero start cluster ({cluster_num:#010x})",
 							cluster_num=entry.start_cluster()
 						)
 
 				else:
-					if entry.DIR_FileSize == 0 and entry.start_cluster != 0:
+					if entry.DIR_FileSize == 0 and entry.start_cluster() != 0:
 						fnlog.invalid("is a zero-length file with non-zero start cluster ({cluster_num:#010x})",
 							cluster_num=entry.start_cluster()
 						)
-					elif entry.DIR_FileSize != 0 and entry.start_cluster == 0:
+					elif entry.DIR_FileSize != 0 and entry.start_cluster() == 0:
 						fnlog.invalid("is a nonzero-length file with zero start cluster")
 
 				if entry.start_cluster() != 0 and not self.volume._is_valid_cluster_num(entry.start_cluster()):
