@@ -1,5 +1,6 @@
 from ctypes import sizeof
 import calendar
+import collections
 import operator
 import re
 import string
@@ -84,8 +85,6 @@ _BS_LABEL_NO_NAME = "{0:11s}".format("NO NAME")
 ## check FAT for unreferenced but occupied clusters
 ## check for cyclical cluster chains
 ## check for cross-linked cluster chains
-## check for cyclical directory links
-## check for cross-linked directories
 ## check truncated chains (EOC, free or bad)
 ## check overlong chains
 
@@ -571,7 +570,10 @@ class _ChkDsk(object):
 
 
 	def _check_dirs(self):
-		seen_clusters = dict()
+		# this is probably not scalable for large volumes but w/e for now
+		cluster_starts = collections.defaultdict(list)
+		already_checked = set()
+
 		q = [ ( u"\\", 0, None ) ]
 
 		while q:
@@ -596,32 +598,22 @@ class _ChkDsk(object):
 				if entry_cluster == 0:
 					continue
 
-				next_path = dir_path.rstrip(u"\\") + u"\\" + entry_name
+				entry_path = dir_path.rstrip(u"\\") + u"\\" + entry_name
 
-				do_check_dir = entry.is_directory()
-				update_history = True
+				cluster_starts[entry_cluster].append(entry_path)
 
-				if entry_cluster in seen_clusters:
-					other_path, already_check_dired = seen_clusters[entry_cluster]
-					log.invalid(u"""Entry "{entry_name}" points to previously
-						seen directory at cluster {entry_cluster:#010x}
-						("{other_path}")""",
-						entry_name=entry_name,
-						entry_cluster=entry_cluster,
-						other_path=other_path
-					)
-					if already_check_dired:
-						do_check_dir = False
+				if entry.is_directory() and entry_cluster not in already_checked:
+					already_checked.add(entry_cluster)
+					q.append(( entry_path, entry_cluster, cluster ))
 
-					# clusters previously claimed by files are overridden by
-					# dirs claiming them
-					update_history = do_check_dir
-
-				if update_history:
-					seen_clusters[entry_cluster] = (next_path, do_check_dir)
-
-				if do_check_dir:
-					q.append(( next_path, entry_cluster, cluster ))
+		# TODO: more rigorous check that discovers chain cross-links
+		for cluster, paths in cluster_starts.iteritems():
+			if len(paths) > 1:
+				self.log.invalid(
+					"Start cluster {cluster:#010x} shared by {paths}",
+					cluster=cluster,
+					paths=", ".join('"{0}"'.format(p) for p in paths)
+				)
 
 
 	def _check_dir(self, log, stream, dir_cluster, parent_cluster, allow_vol):
