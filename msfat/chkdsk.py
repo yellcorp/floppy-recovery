@@ -1,6 +1,8 @@
 from ctypes import sizeof
+import array
 import calendar
 import collections
+import itertools
 import operator
 import re
 import string
@@ -83,14 +85,14 @@ _BS_LABEL_NO_NAME = "{0:11s}".format("NO NAME")
 
 # TODO:
 ## check FAT for unreferenced but occupied clusters
-## check for cyclical cluster chains
-## check for cross-linked cluster chains
-## check truncated chains (EOC, free or bad)
-## check overlong chains
 
 
 def chkdsk(volume, user_log_func):
 	_ChkDsk(volume, user_log_func).run()
+
+
+def _plural(n, singular, plural, format_spec=""):
+	return "{0} {1}".format(format(n, format_spec), n == 1 and singular or plural)
 
 
 def _is_common_jmpboot(bytes):
@@ -247,7 +249,7 @@ class _ChkDsk(object):
 		self._check_sig()
 		self._check_fat_size()
 		self._check_fats()
-		self._check_dirs()
+		self._check_files()
 
 
 	def _check_common(self):
@@ -577,10 +579,14 @@ class _ChkDsk(object):
 			self.log.info("FAT[{volume.active_fat_index}] has non-zero data in its unused area")
 
 
-	def _check_dirs(self):
-		# this is probably not scalable for large volumes but w/e for now
-		cluster_starts = collections.defaultdict(list)
-		already_checked = set()
+	def _check_files(self):
+		try:
+			chain_checker = _AllocChecker(self.volume, self.user_log)
+		except ValueError:
+			self.log.invalid("Skipping chain check due to bad cluster count")
+			chain_checker = None
+
+		already_checked_dirs = set()
 
 		q = [ ( u"\\", 0, None ) ]
 
@@ -605,25 +611,25 @@ class _ChkDsk(object):
 				entry_name = long_name or entry.short_name_with_encoding("cp1252")
 				entry_cluster = entry.start_cluster()
 
-				if entry_cluster == 0:
+				if entry_cluster == 0 or entry.is_volume_id():
 					continue
 
-				entry_path = dir_path.rstrip(u"\\") + u"\\" + entry_name
+				if dir_path == "\\":
+					entry_path = dir_path + entry_name
+				else:
+					entry_path = dir_path.rstrip("\\") + "\\" + entry_name
 
-				cluster_starts[entry_cluster].append(entry_path)
+				expect_bytes = 0
+				if not entry.is_directory():
+					expect_bytes = entry.DIR_FileSize
 
-				if entry.is_directory() and entry_cluster not in already_checked:
-					already_checked.add(entry_cluster)
+				if chain_checker and expect_bytes > 0 or entry.is_directory():
+					chain_checker.mark_chain(
+						entry_cluster, entry_path, expect_bytes)
+
+				if entry.is_directory() and entry_cluster not in already_checked_dirs:
+					already_checked_dirs.add(entry_cluster)
 					q.append(( entry_path, entry_cluster, cluster ))
-
-		# TODO: more rigorous check that discovers chain cross-links
-		for cluster, paths in cluster_starts.iteritems():
-			if len(paths) > 1:
-				self.log.invalid(
-					"Start cluster {cluster:#010x} shared by {paths}",
-					cluster=cluster,
-					paths=", ".join('"{0}"'.format(p) for p in paths)
-				)
 
 
 	def _check_dir(self, log, stream, dir_cluster, parent_cluster, allow_vol):
@@ -876,3 +882,90 @@ def _check_metadir(log, entry, long_name, expect_name, expect_cluster):
 			expect=expect_cluster,
 			got=entry.start_cluster()
 		)
+
+
+class _AllocChecker(object):
+	def __init__(self, volume, log):
+		self.volume = volume
+		self.log = log
+
+		self._index_to_name = [ "<FREE>", "<INVALID>" ]
+		self._name_to_index = dict((n, i) for i, n in enumerate(self._index_to_name))
+
+		table_size = self.volume._max_cluster_num + 1
+		if table_size <= 0:
+			raise ValueError("Volume has invalid cluster count")
+
+		self._ownership = array.array('L', itertools.repeat(0, table_size))
+		self._ownership[0] = 1
+		self._ownership[1] = 1
+
+
+	def mark_chain(self, start_cluster, owner_name, byte_count=0):
+		if owner_name in self._name_to_index:
+			raise ValueError("Name {0!r} has already been used".format(owner_name))
+
+		log = _PrefixLogger(self.log.log, owner_name + " ")
+
+		owner_index = self._add_name(owner_name)
+		expect_cluster_count = (byte_count + self.volume._bytes_per_cluster - 1) / self.volume._bytes_per_cluster
+		actual_cluster_count = 0
+
+		prev_cluster_num = 0
+		cluster_num = start_cluster
+
+		def cluster_count_string():
+			return _plural(actual_cluster_count, "cluster", "clusters")
+
+		while not self.volume._is_eoc(cluster_num):
+			if cluster_num == 0:
+				log.invalid("links to free space after {cluster_count}",
+					cluster_count=cluster_count_string()
+				)
+				return
+
+			elif self.volume._is_bad(cluster_num):
+				log.invalid("links to bad cluster at {prev_cluster_num:#010x} after {cluster_count}",
+					prev_cluster_num=prev_cluster_num,
+					cluster_count=cluster_count_string()
+				)
+				return
+
+			elif not self.volume._is_valid_cluster_num(cluster_num):
+				log.invalid("links to invalid cluster {cluster_num:#010x} after {cluster_count}",
+					cluster_num=cluster_num,
+					cluster_count=cluster_count_string()
+				)
+				return
+
+			elif self._ownership[cluster_num] != 0:
+				log.invalid("""is cross-linked with {other_owner}
+					at cluster {cluster_num:#010x}
+					after {cluster_count}""",
+					other_owner=self._index_to_name[self._ownership[cluster_num]],
+					cluster_num=cluster_num,
+					cluster_count=cluster_count_string()
+				)
+				return
+
+			else:
+				actual_cluster_count += 1
+				self._ownership[cluster_num] = owner_index
+				prev_cluster_num = cluster_num
+				cluster_num = self.volume._get_fat_entry(cluster_num)
+
+		if expect_cluster_count > 0 and actual_cluster_count != expect_cluster_count:
+			log.invalid("""is too {adjective}. Expected cluster count of
+				{expect} for {byte_count:#x} bytes, found {got}""",
+				adjective=actual_cluster_count > expect_cluster_count and "long" or "short",
+				expect=expect_cluster_count,
+				byte_count=byte_count,
+				got=actual_cluster_count
+			)
+
+
+	def _add_name(self, name):
+		new_index = len(self._index_to_name)
+		self._name_to_index[name] = new_index
+		self._index_to_name.append(name)
+		return new_index
