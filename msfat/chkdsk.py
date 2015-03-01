@@ -694,7 +694,7 @@ class _ChkDsk(object):
 					if entry.DIR_Attr & ATTR_VALID_MASK & (~ATTR_VOLUME_ID):
 						log.invalid("Volume id {sfn!r} has non-volume attribute bits set", sfn=short_name)
 
-				filename = long_name is None and repr(short_name) or long_name
+				filename = long_name or repr(short_name)
 				fnlog = log.extend(filename + " ")
 				if entry.DIR_Attr & ATTR_RESERVED_MASK:
 					fnlog.uncommon("has reserved attribute bits set")
