@@ -243,6 +243,7 @@ class FATVolume(object):
 		# you could use self._bpb.BPB_BytsPerSec
 		# self._bytes_per_sector = self._bpb.BPB_BytsPerSec
 		self._bytes_per_sector = self._geometry.sector_size
+		self._bytes_per_cluster = self._bytes_per_sector * self._bpb.BPB_SecPerClus
 
 		# you could use BPB_TotSec16 / BPB_TotSec32
 		# self._total_sector_count = self._calc_total_sector_count()
