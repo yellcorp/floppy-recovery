@@ -69,7 +69,6 @@ _BS_LABEL_NO_NAME = "{0:11s}".format("NO NAME")
 
 
 # TODO:
-## check LFN fields that should be zero, are
 ## check FAT for unreferenced but occupied clusters
 ## check for cyclical cluster chains
 ## check for cross-linked cluster chains
@@ -598,6 +597,17 @@ class _ChkDsk(object):
 				log.info("Free entry: {name!b}", name=entry.DIR_Name)
 
 			elif entry.is_long_name_segment():
+				if entry.LDIR_Type != 0:
+					log.invalid(u"LFN segment with unknown LDIR_Type {0:#04x}", entry.LDIR_Type)
+					continue
+
+				if entry.LDIR_FstClusLO != 0:
+					log.warn(u"""LFN segment {segment} with non-zero
+						LDIR_FstClusLO {LDIR_FstClusLO:#04x}""",
+						segment=entry.long_name_segment(),
+						LDIR_FstClusLO=entry.LDIR_FstClusLO
+					)
+
 				if entry.is_final_long_name_segment():
 					dispose_lfns("Sequence reset")
 					long_entries = [ entry ]
