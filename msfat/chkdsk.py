@@ -581,10 +581,10 @@ class _ChkDsk(object):
 
 	def _check_files(self):
 		try:
-			chain_checker = _AllocChecker(self.volume, self.user_log)
+			alloc_checker = _AllocChecker(self.volume, self.user_log)
 		except ValueError:
 			self.log.invalid("Skipping chain check due to bad cluster count")
-			chain_checker = None
+			alloc_checker = None
 
 		already_checked_dirs = set()
 
@@ -623,13 +623,15 @@ class _ChkDsk(object):
 				if not entry.is_directory():
 					expect_bytes = entry.DIR_FileSize
 
-				if chain_checker and expect_bytes > 0 or entry.is_directory():
-					chain_checker.mark_chain(
+				if alloc_checker and expect_bytes > 0 or entry.is_directory():
+					alloc_checker.mark_chain(
 						entry_cluster, entry_path, expect_bytes)
 
 				if entry.is_directory() and entry_cluster not in already_checked_dirs:
 					already_checked_dirs.add(entry_cluster)
 					q.append(( entry_path, entry_cluster, cluster ))
+
+		alloc_checker.log_unmarked()
 
 
 	def _check_dir(self, log, stream, dir_cluster, parent_cluster, allow_vol):
@@ -900,6 +902,9 @@ class _AllocChecker(object):
 		self._ownership[0] = 1
 		self._ownership[1] = 1
 
+		self._bad_count = 0
+		self._linked_bad_count = 0
+
 
 	def mark_chain(self, start_cluster, owner_name, byte_count=0):
 		if owner_name in self._name_to_index:
@@ -922,21 +927,23 @@ class _AllocChecker(object):
 				log.invalid("links to free space after {cluster_count}",
 					cluster_count=cluster_count_string()
 				)
-				return
+				break
 
 			elif self.volume._is_bad(cluster_num):
+				self._bad_count += 1
+				self._linked_bad_count += 1
 				log.invalid("links to bad cluster at {prev_cluster_num:#010x} after {cluster_count}",
 					prev_cluster_num=prev_cluster_num,
 					cluster_count=cluster_count_string()
 				)
-				return
+				break
 
 			elif not self.volume._is_valid_cluster_num(cluster_num):
 				log.invalid("links to invalid cluster {cluster_num:#010x} after {cluster_count}",
 					cluster_num=cluster_num,
 					cluster_count=cluster_count_string()
 				)
-				return
+				break
 
 			elif self._ownership[cluster_num] != 0:
 				log.invalid("""is cross-linked with {other_owner}
@@ -946,7 +953,7 @@ class _AllocChecker(object):
 					cluster_num=cluster_num,
 					cluster_count=cluster_count_string()
 				)
-				return
+				break
 
 			else:
 				actual_cluster_count += 1
@@ -962,6 +969,44 @@ class _AllocChecker(object):
 				byte_count=byte_count,
 				got=actual_cluster_count
 			)
+
+		return actual_cluster_count
+
+
+	def log_unmarked(self):
+		unused_clusters = 0
+		unused_chains = 0
+
+		# TODO: for now, seek backwards, but what you really want to do is
+		# turn the FAT's singly linked list into a doubly-linked graph, and
+		# follow sinks (file ends) back up to sources, log the longest one, and
+		# any others linking in as cross-linked
+		for cluster_num in xrange(self.volume._max_cluster_num, 1, -1):
+			if self._ownership[cluster_num] != 0:
+				continue
+
+			fat_entry = self.volume._get_fat_entry(cluster_num)
+
+			if self.volume._is_bad(fat_entry):
+				self._bad_count += 1
+
+			elif fat_entry != 0:
+				unused_chains += 1
+				unused_clusters += self.mark_chain(
+					cluster_num, "<Unused chain #{0}>".format(unused_chains)
+				)
+
+		if self._bad_count > 0:
+			if self._linked_bad_count > 0:
+				self.log.invalid("Volume has {0} bad clusters, {1} of which truncate files", self._bad_count, self._linked_bad_count)
+			else:
+				self.log.info("Volume has {0} bad clusters", self._bad_count)
+
+		if unused_chains > 0:
+			self.log.uncommon("Discovered {cluster_count} in {chain_count}".format(
+				cluster_count=_plural(unused_clusters, "allocated unused cluster", "allocated unused clusters"),
+				chain_count=_plural(unused_chains, "chain", "chains"),
+			))
 
 
 	def _add_name(self, name):
