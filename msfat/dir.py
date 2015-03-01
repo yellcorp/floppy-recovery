@@ -143,17 +143,28 @@ class FATDirEntry(Union):
 		("long",  _FATLongDirEntry)
 	]
 
-	def short_name(self):
+	def _name_parts(self):
 		name = bytearray(self.DIR_Name)
 		if name[0] == _INITIAL_0XE5_PLACEHOLDER:
 			name[0] = 0xE5
 
-		prefix = str(name[:8]).rstrip()
-		suffix = str(name[8:]).rstrip()
+		return str(name[:8]).rstrip(), str(name[8:]).rstrip()
+
+	def short_name(self):
+		prefix, suffix = self._name_parts()
 
 		if suffix:
 			return prefix + "." + suffix
 		return prefix
+
+	def short_name_with_encoding(self, encoding="cp1252"):
+		prefix, suffix = self._name_parts()
+		uprefix = prefix.decode(encoding, "replace")
+		usuffix = suffix.decode(encoding, "replace")
+
+		if usuffix:
+			return uprefix + u"." + usuffix
+		return uprefix
 
 	def short_name_checksum(self):
 		return short_name_checksum(self.DIR_Name)
