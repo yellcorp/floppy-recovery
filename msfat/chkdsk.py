@@ -807,5 +807,5 @@ def _check_metadir(log, entry, long_name, expect_name, expect_cluster):
 		log.invalid("""is incorrectly linked. Expected cluster
 			{expect:#010x}, but is {got:#010x}""",
 			expect=expect_cluster,
-			got=entr.start_cluster()
+			got=entry.start_cluster()
 		)
