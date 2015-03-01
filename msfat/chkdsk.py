@@ -124,13 +124,20 @@ class _BaseLogger(object):
 		self.log(_INVALID, *args, **kwargs)
 
 
+class _UserFunctionLogger(_BaseLogger):
+	def __init__(self, user_log_func, formatter=None):
+		_BaseLogger.__init__(self, user_log_func)
+		self._formatter = formatter or string.Formatter()
 
-class _ChkDskLogger(_BaseLogger):
+	def log(self, level, template, *args, **kwargs):
+		message = self._formatter.vformat(template, args, kwargs)
+		self._next_log_func(level, re.sub("[\r\n\t]+", " ", message.strip()))
+
+
+class _DefaultArgsLogger(_BaseLogger):
 	def __init__(self, next_log_func, **kwargs):
 		_BaseLogger.__init__(self, next_log_func)
-
 		self._default_format_dict = kwargs
-		self._formatter = _ChkDskFormatter()
 
 	def log(self, level, template, *args, **kwargs):
 		# slow but whatever
@@ -139,8 +146,7 @@ class _ChkDskLogger(_BaseLogger):
 		else:
 			format_dict = self._default_format_dict
 
-		message = self._formatter.vformat(template, args, format_dict)
-		_BaseLogger.log(self, level, re.sub("[\r\n\t]+", " ", message.strip()))
+		_BaseLogger.log(self, level, template, *args, **format_dict)
 
 
 class _PrefixLogger(_BaseLogger):
@@ -218,8 +224,10 @@ class _ChkDsk(object):
 		self.bpb32 = volume._bpb.fat32
 		self.bpbx = volume.fat_type == TYPE_FAT32 and self.bpb32 or self.bpb16
 
-		self.log = _ChkDskLogger(
-			user_log_func,
+		self.user_log = _UserFunctionLogger(user_log_func, _ChkDskFormatter())
+
+		self.log = _DefaultArgsLogger(
+			self.user_log.log,
 			volume=  self.volume,
 			geometry=self.geometry,
 			bpb=     self.bpb,
