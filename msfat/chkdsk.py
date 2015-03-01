@@ -589,9 +589,11 @@ class _ChkDsk(object):
 				allow_vol = False
 				this_cluster = cluster
 
-			for entry, long_name in self._check_dir(
+			dir_entries = list(self._check_dir(
 				log, stream, this_cluster, parent_cluster, allow_vol
-			):
+			))
+
+			for entry, long_name in dir_entries:
 				entry_name = long_name or entry.short_name_with_encoding("cp1252")
 				entry_cluster = entry.start_cluster()
 
