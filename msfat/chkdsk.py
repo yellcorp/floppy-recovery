@@ -728,7 +728,9 @@ class _ChkDsk(object):
 							log.uncommon("Volume id {sfn!r} doesn't match BS_VolLab {bpbx.BS_VolLab!b}", sfn=short_name)
 						seen_vol = True
 					if entry.DIR_Attr & ATTR_VALID_MASK & (~ATTR_VOLUME_ID):
-						log.invalid("Volume id {sfn!r} has non-volume attribute bits set", sfn=short_name)
+						log.invalid("Volume id {sfn!r} has non-volume attribute bits set ({attrs})",
+							sfn=short_name, attrs=entry.attr_string()
+						)
 
 				filename = long_name or repr(short_name)
 				fnlog = log.extend(filename + " ")
