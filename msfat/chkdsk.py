@@ -240,7 +240,7 @@ class _ChkDsk(object):
 		self._check_sig()
 		self._check_fat_size()
 		self._check_fats()
-		self._check_dir("\\", self.volume._open_root_dir(), None, None, True)
+		self._check_dirs()
 
 
 	def _check_common(self):
@@ -570,9 +570,45 @@ class _ChkDsk(object):
 			self.log.info("FAT[{volume.active_fat_index}] has non-zero data in its unused area")
 
 
-	def _check_dir(self, dir_name, stream, dir_cluster, parent_cluster, allow_vol):
-		log = _PrefixLogger(self.log.log, u"In dir {0}: ".format(dir_name))
+	def _check_dirs(self):
+		seen_clusters = dict()
+		q = [ ( u"\\", 0, None ) ]
 
+		while q:
+			dir_path, cluster, parent_cluster = q.pop(0)
+			log = _PrefixLogger(self.log.log, u"In dir {0}: ".format(dir_path))
+
+			if cluster == 0:
+				stream = self.volume._open_root_dir()
+				allow_vol = True
+				this_cluster = None
+			else:
+				stream = self.volume._open_cluster_chain(cluster)
+				allow_vol = False
+				this_cluster = cluster
+
+			for subdir_entry, long_name in self._check_dir(
+				log, stream, this_cluster, parent_cluster, allow_vol
+			):
+				subdir_name = long_name or subdir_entry.short_name_with_encoding("cp1252")
+				subdir_cluster = subdir_entry.start_cluster()
+
+				next_path = dir_path.rstrip(u"\\") + u"\\" + subdir_name
+
+				if subdir_cluster in seen_clusters:
+					log.invalid(u"""Entry "{subdir_name}" points to previously
+						seen directory at cluster {subdir_cluster:#010x}
+						("{first_seen_path}")""",
+						subdir_name=subdir_name,
+						subdir_cluster=subdir_cluster,
+						first_seen_path=seen_clusters[subdir_cluster]
+					)
+				else:
+					seen_clusters[subdir_cluster] = next_path
+					q.append(( next_path, subdir_cluster, cluster ))
+
+
+	def _check_dir(self, log, stream, dir_cluster, parent_cluster, allow_vol):
 		long_entries = [ ]
 		seen_names = set()
 		seen_vol = False
@@ -755,6 +791,9 @@ class _ChkDsk(object):
 				elif parent_cluster is not None:
 					_check_metadir(log, entry, long_name, UPDIR_NAME, parent_cluster)
 					parent_cluster = None
+
+				elif entry.is_directory():
+					yield entry, long_name
 
 
 def _check_dir_trail(log, stream):
