@@ -13,6 +13,8 @@ from msfat.dir import FATDirEntry, assemble_long_entries, is_valid_short_name, \
 	is_valid_long_name, is_long_name_correctly_padded, THISDIR_NAME, \
 	UPDIR_NAME, unpack_fat_date, unpack_fat_time
 
+import disklib
+
 
 # Log levels match values of equivalent severity in python logging module
 # Short names privately...
@@ -33,6 +35,16 @@ _FMT_U8 =  "#04x"
 
 
 _MAX_CLUSTER_BYTES = 0x8000
+
+# http://www.pcguide.com/ref/fdd/formatFile-c.html
+_CAPACITY_TO_ROOT_CNT = {
+	disklib.CAPACITY_360K:   0x0070,
+	disklib.CAPACITY_1_2MB:  0x00E0,
+	disklib.CAPACITY_720K:   0x0070,
+	disklib.CAPACITY_1_44MB: 0x00E0,
+	disklib.CAPACITY_2_88MB: 0x01C0
+}
+_REC_FAT16_ROOT_CNT = 0x0200
 
 _MEDIA_BYTE_REMOVABLE = 0xF0
 _VALID_MEDIA_BYTE = (_MEDIA_BYTE_REMOVABLE,) + tuple(xrange(0xF8, 0x100))
@@ -348,6 +360,10 @@ class _ChkDsk(object):
 
 		if self.bpb.BPB_RootEntCnt == 0:
 			self.log.invalid("Zero BPB_RootEntCnt is invalid for {volume.fat_type} volumes")
+		else:
+			expect_root_cnt = _CAPACITY_TO_ROOT_CNT.get(self.geometry.total_bytes(), _REC_FAT16_ROOT_CNT)
+			if self.bpb.BPB_RootEntCnt != expect_root_cnt:
+				self.log.uncommon("Uncommon BPB_RootEntCnt for volume of this size: {bpb.BPB_RootEntCnt:#06x}")
 
 		if self.bpb.BPB_FATSz16 == 0:
 			self.log.invalid("Zero BPB_FATSz16 is invalid for {volume.fat_type} volumes")
