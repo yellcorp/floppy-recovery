@@ -141,6 +141,18 @@ class FATDirEntry(Union):
 		("long",  _FATLongDirEntry)
 	]
 
+	def short_name(self):
+		name = bytearray(self.DIR_Name)
+		if name[0] == _INITIAL_0XE5_PLACEHOLDER:
+			name[0] = 0xE5
+
+		prefix = str(name[:8]).rstrip()
+		suffix = str(name[8:]).rstrip()
+
+		if suffix:
+			return prefix + "." + suffix
+		return prefix
+
 	def short_name_checksum(self):
 		return short_name_checksum(self.DIR_Name)
 
@@ -177,10 +189,43 @@ class FATDirEntry(Union):
 	def is_archive(self):
 		return self.DIR_Attr & ATTR_ARCHIVE != 0
 
+	def attr_string(self):
+		return "".join(
+			(b and ch or "-") for ch, b in [
+				("A", self.is_archive()),
+				("D", self.is_directory()),
+				("V", self.is_volume_id()),
+				("S", self.is_system()),
+				("H", self.is_hidden()),
+				("R", self.is_read_only())
+			]
+		)
+
 	def start_cluster(self):
 		return (
 			(self.DIR_FstClusHI << 16) |
 			self.DIR_FstClusLO
+		)
+
+	def create_time(self, timezone=None):
+		return fat_time_to_unix(
+			self.short_entry.DIR_CrtDate,
+			self.short_entry.DIR_CrtTime,
+			self.short_entry.DIR_CrtTimeTenth * 0.01,
+			timezone
+		)
+
+	def access_time(self, timezone=None):
+		return fat_time_to_unix(
+			self.short_entry.DIR_LstAccDate,
+			0, 0, timezone
+		)
+
+	def write_time(self, timezone=None):
+		return fat_time_to_unix(
+			self.short_entry.DIR_WrtDate,
+			self.short_entry.DIR_WrtTime,
+			0, timezone
 		)
 
 	def iter_long_name_bytes(self):
@@ -207,71 +252,24 @@ class FATDirEntry(Union):
 
 
 class FATAggregateDirEntry(object):
-	def __init__(self, short_entry, long_name=None):
+	def __init__(self, short_entry, long_entries=None):
 		self.short_entry = short_entry
-		self.long_name = long_name
+		self.long_entries = list(long_entries or [ ])
+		if len(self.long_entries) > 0:
+			self.long_name = assemble_long_entries(self.long_entries)
+		else:
+			self.long_name = None
 
 	def name(self):
 		if self.long_name is None:
-			return self.short_name()
+			return self.short_entry.short_name()
 		return self.long_name
-
-	def short_name(self):
-		name = bytearray(self.short_entry.DIR_Name)
-		if name[0] == _INITIAL_0XE5_PLACEHOLDER:
-			name[0] = 0xE5
-
-		prefix = str(name[:8]).rstrip()
-		suffix = str(name[8:]).rstrip()
-
-		if suffix:
-			return prefix + "." + suffix
-		return prefix
-
-	def attr_string(self):
-		return "".join(
-			(b and ch or "-") for ch, b in [
-				("A", self.short_entry.is_archive()),
-				("D", self.short_entry.is_directory()),
-				("V", self.short_entry.is_volume_id()),
-				("S", self.short_entry.is_system()),
-				("H", self.short_entry.is_hidden()),
-				("R", self.short_entry.is_read_only())
-			]
-		)
-
-	def create_time(self, timezone=None):
-		return fat_time_to_unix(
-			self.short_entry.DIR_CrtDate,
-			self.short_entry.DIR_CrtTime,
-			self.short_entry.DIR_CrtTimeTenth * 0.01,
-			timezone
-		)
-
-	def access_time(self, timezone=None):
-		return fat_time_to_unix(
-			self.short_entry.DIR_LstAccDate,
-			0, 0, timezone
-		)
-
-	def start_cluster(self):
-		return self.short_entry.start_cluster()
-
-	def write_time(self, timezone=None):
-		return fat_time_to_unix(
-			self.short_entry.DIR_WrtDate,
-			self.short_entry.DIR_WrtTime,
-			0, timezone
-		)
-
-	def file_size(self):
-		return self.short_entry.DIR_FileSize
 
 	def __str__(self):
 		return "{0!r} [{1}] {2}".format(
 			self.name(),
-			self.attr_string(),
-			self.file_size()
+			self.short_entry.attr_string(),
+			self.short_entry.DIR_FileSize
 		)
 
 
@@ -335,11 +333,11 @@ def read_dir(stream):
 				# this one. what is it? dunno
 				long_entries = [ ]
 		else:
-			long_name = None
 			# we should have hit long entry 1 (they're 1-based to prevent 0s
 			# in the first byte)
 			if _long_entry_set_belongs_to_short_entry(long_entries, entry):
-				long_name = assemble_long_entries(long_entries)
+				yield FATAggregateDirEntry(entry, long_entries)
+			else:
+				yield FATAggregateDirEntry(entry)
 
-			yield FATAggregateDirEntry(entry, long_name)
 			long_entries = [ ]
