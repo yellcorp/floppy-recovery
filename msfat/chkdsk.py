@@ -587,25 +587,41 @@ class _ChkDsk(object):
 				allow_vol = False
 				this_cluster = cluster
 
-			for subdir_entry, long_name in self._check_dir(
+			for entry, long_name in self._check_dir(
 				log, stream, this_cluster, parent_cluster, allow_vol
 			):
-				subdir_name = long_name or subdir_entry.short_name_with_encoding("cp1252")
-				subdir_cluster = subdir_entry.start_cluster()
+				entry_name = long_name or entry.short_name_with_encoding("cp1252")
+				entry_cluster = entry.start_cluster()
 
-				next_path = dir_path.rstrip(u"\\") + u"\\" + subdir_name
+				if entry_cluster == 0:
+					continue
 
-				if subdir_cluster in seen_clusters:
-					log.invalid(u"""Entry "{subdir_name}" points to previously
-						seen directory at cluster {subdir_cluster:#010x}
-						("{first_seen_path}")""",
-						subdir_name=subdir_name,
-						subdir_cluster=subdir_cluster,
-						first_seen_path=seen_clusters[subdir_cluster]
+				next_path = dir_path.rstrip(u"\\") + u"\\" + entry_name
+
+				do_check_dir = entry.is_directory()
+				update_history = True
+
+				if entry_cluster in seen_clusters:
+					other_path, already_check_dired = seen_clusters[entry_cluster]
+					log.invalid(u"""Entry "{entry_name}" points to previously
+						seen directory at cluster {entry_cluster:#010x}
+						("{other_path}")""",
+						entry_name=entry_name,
+						entry_cluster=entry_cluster,
+						other_path=other_path
 					)
-				else:
-					seen_clusters[subdir_cluster] = next_path
-					q.append(( next_path, subdir_cluster, cluster ))
+					if already_check_dired:
+						do_check_dir = False
+
+					# clusters previously claimed by files are overridden by
+					# dirs claiming them
+					update_history = do_check_dir
+
+				if update_history:
+					seen_clusters[entry_cluster] = (next_path, do_check_dir)
+
+				if do_check_dir:
+					q.append(( next_path, entry_cluster, cluster ))
 
 
 	def _check_dir(self, log, stream, dir_cluster, parent_cluster, allow_vol):
@@ -794,7 +810,7 @@ class _ChkDsk(object):
 					_check_metadir(log, entry, long_name, UPDIR_NAME, parent_cluster)
 					parent_cluster = None
 
-				elif entry.is_directory():
+				else:
 					yield entry, long_name
 
 
