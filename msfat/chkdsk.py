@@ -753,7 +753,7 @@ class _ChkDsk(object):
 							filesize=entry.DIR_FileSize
 						)
 
-					if entry.start_cluster() == 0:
+					if entry.start_cluster() == 0 and _bytes_to_str(entry.DIR_Name) != UPDIR_NAME: # updir links are zero to say the parent is the root dir
 						fnlog.invalid("is a directory with zero start cluster")
 
 				elif entry.is_volume_id():
