@@ -17,7 +17,9 @@ def allowed_in_short_name(char):
 	return char == '\x05' or char >= '\x20' and char not in '"*+,./:;<=>?[\\]|'
 
 def is_valid_short_name(s):
-	return s[0] != ' ' and all(allowed_in_short_name(c) for c in s)
+	return s == THISDIR_NAME or s == UPDIR_NAME or (
+		s[0] != ' ' and all(allowed_in_short_name(c) for c in s)
+	)
 
 def allowed_in_long_name(char):
 	return char >= '\x20' and char not in '"*/:<>?\\|'
