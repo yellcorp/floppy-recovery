@@ -240,7 +240,7 @@ class _ChkDsk(object):
 		self._check_sig()
 		self._check_fat_size()
 		self._check_fats()
-		self._chkdsk_dir("\\", self.volume._open_root_dir(), None, None, True)
+		self._check_dir("\\", self.volume._open_root_dir(), None, None, True)
 
 
 	def _check_common(self):
@@ -570,7 +570,7 @@ class _ChkDsk(object):
 			self.log.info("FAT[{volume.active_fat_index}] has non-zero data in its unused area")
 
 
-	def _chkdsk_dir(self, dir_name, stream, dir_cluster, parent_cluster, allow_vol):
+	def _check_dir(self, dir_name, stream, dir_cluster, parent_cluster, allow_vol):
 		log = _PrefixLogger(self.log.log, u"In dir {0}: ".format(dir_name))
 
 		long_entries = [ ]
@@ -605,7 +605,7 @@ class _ChkDsk(object):
 				if bytes != _NULL_DIR_ENTRY:
 					log.info("End of dir has non-null data: {name!b}", name=entry.DIR_Name)
 
-				_chkdsk_dir_trail(log, stream)
+				_check_dir_trail(log, stream)
 				return
 
 			elif entry.is_free_entry():
@@ -706,10 +706,10 @@ class _ChkDsk(object):
 					fnlog.uncommon("DIR_CrtTimeTenth out of range ({val})", val=entry.DIR_CrtTimeTenth)
 
 				for date_field, can_be_zero in (("DIR_CrtDate", True), ("DIR_LstAccDate", True), ("DIR_WrtDate", False)):
-					_chkdsk_direntry_date(fnlog, date_field, getattr(entry, date_field), can_be_zero)
+					_check_direntry_date(fnlog, date_field, getattr(entry, date_field), can_be_zero)
 
 				for time_field in ("DIR_CrtTime", "DIR_WrtTime"):
-					_chkdsk_direntry_time(fnlog, time_field, getattr(entry, time_field))
+					_check_direntry_time(fnlog, time_field, getattr(entry, time_field))
 
 				if entry.is_directory():
 					if entry.DIR_FileSize != 0:
@@ -741,15 +741,15 @@ class _ChkDsk(object):
 					)
 
 				if dir_cluster is not None:
-					_chkdsk_metadir(log, entry, long_name, THISDIR_NAME, dir_cluster)
+					_check_metadir(log, entry, long_name, THISDIR_NAME, dir_cluster)
 					dir_cluster = None
 
 				elif parent_cluster is not None:
-					_chkdsk_metadir(log, entry, long_name, UPDIR_NAME, parent_cluster)
+					_check_metadir(log, entry, long_name, UPDIR_NAME, parent_cluster)
 					parent_cluster = None
 
 
-def _chkdsk_dir_trail(log, stream):
+def _check_dir_trail(log, stream):
 	while True:
 		bytes = stream.read(sizeof(FATDirEntry))
 		if len(bytes) == 0:
@@ -759,7 +759,7 @@ def _chkdsk_dir_trail(log, stream):
 			log.info("Trailing entry: {name!b}", name=entry.DIR_Name)
 
 
-def _chkdsk_direntry_date(log, attr_name, value, can_be_zero):
+def _check_direntry_date(log, attr_name, value, can_be_zero):
 	if can_be_zero and value == 0:
 		return
 
@@ -776,7 +776,7 @@ def _chkdsk_direntry_date(log, attr_name, value, can_be_zero):
 		log.invalid("{attr_name} has invalid month: {month}", attr_name=attr_name, month=month)
 
 
-def _chkdsk_direntry_time(log, attr_name, value):
+def _check_direntry_time(log, attr_name, value):
 	hours, minutes, seconds = unpack_fat_time(value)
 	for unit_name, unit_value, unit_max in (
 		("hours",   hours,   23),
@@ -789,7 +789,7 @@ def _chkdsk_direntry_time(log, attr_name, value):
 			)
 
 
-def _chkdsk_metadir(log, entry, long_name, expect_name, expect_cluster):
+def _check_metadir(log, entry, long_name, expect_name, expect_cluster):
 	name = _bytes_to_str(entry.DIR_Name)
 	dirlog = log.extend("Metadir {0!r} ".format(expect_name))
 
