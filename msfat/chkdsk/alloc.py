@@ -63,7 +63,7 @@ class _AllocChecker(object):
 		self._free_count = 0
 		self._bad_count = 0
 		self._invalid_count = 0
-		self._linked_bad_count = 0
+		self._truncated_count = 0
 		self._anonymous_count = 0
 
 		self._anon_name_counter = 1
@@ -153,6 +153,7 @@ class _AllocChecker(object):
 				prev=prev_cluster,
 				cluster_count=cluster_count_string()
 			)
+			self._truncated_count += 1
 
 		if expect_cluster_count > 0 and expect_cluster_count != actual_cluster_count:
 			log.invalid("""is too {adjective}. Expected cluster count of
@@ -162,9 +163,6 @@ class _AllocChecker(object):
 				expect_bytes=expect_bytes,
 				got=actual_cluster_count
 			)
-
-		if cluster == _BAD_CLUSTER:
-			self._linked_bad_count += 1
 
 		return actual_cluster_count
 
