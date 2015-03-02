@@ -4,7 +4,6 @@ import calendar
 import collections
 import itertools
 import operator
-import re
 import string
 
 
@@ -16,19 +15,13 @@ from msfat.dir import FATDirEntry, assemble_long_entries, is_valid_short_name, \
 	is_valid_long_name, is_long_name_correctly_padded, THISDIR_NAME, \
 	UPDIR_NAME, unpack_fat_date, unpack_fat_time
 
+from msfat.chkdsk.log import _INVALID, _UNCOMMON, _INFO, \
+	CHKDSK_LOG_INVALID, CHKDSK_LOG_UNCOMMON, CHKDSK_LOG_INFO, \
+	_UserFunctionLogger, _DefaultArgsLogger, _PrefixLogger
+
+from msfat.chkdsk.alloc import _AllocChecker
+
 import disklib
-
-
-# Log levels match values of equivalent severity in python logging module
-# Short names privately...
-_INVALID = 40
-_UNCOMMON = 30
-_INFO = 20
-
-# ...long names publicly
-CHKDSK_LOG_INVALID = _INVALID
-CHKDSK_LOG_UNCOMMON = _UNCOMMON
-CHKDSK_LOG_INFO = _INFO
 
 
 # need to add 2 as the formatter counts the 0x prefix as part of the width
@@ -83,16 +76,8 @@ _TYPES_TO_XBSTYPE = {
 _BS_LABEL_NO_NAME = "{0:11s}".format("NO NAME")
 
 
-# TODO:
-## check FAT for unreferenced but occupied clusters
-
-
 def chkdsk(volume, user_log_func):
 	_ChkDsk(volume, user_log_func).run()
-
-
-def _plural(n, singular, plural, format_spec=""):
-	return "{0} {1}".format(format(n, format_spec), n == 1 and singular or plural)
 
 
 def _is_common_jmpboot(bytes):
@@ -107,65 +92,6 @@ class _ChkDskFormatter(string.Formatter):
 			return repr(_bytes_to_str(value))
 		else:
 			return string.Formatter.convert_field(self, value, conversion)
-
-
-class _BaseLogger(object):
-	def __init__(self, next_log_func):
-		self._next_log_func = next_log_func
-
-	def log(self, level, *args, **kwargs):
-		self._next_log_func(level, *args, **kwargs)
-
-	def info(self, *args, **kwargs):
-		self.log(_INFO, *args, **kwargs)
-
-	def uncommon(self, *args, **kwargs):
-		self.log(_UNCOMMON, *args, **kwargs)
-
-	def invalid(self, *args, **kwargs):
-		self.log(_INVALID, *args, **kwargs)
-
-
-class _UserFunctionLogger(_BaseLogger):
-	def __init__(self, user_log_func, formatter=None):
-		_BaseLogger.__init__(self, user_log_func)
-		self._formatter = formatter or string.Formatter()
-
-	def log(self, level, template, *args, **kwargs):
-		message = self._formatter.vformat(template, args, kwargs)
-		self._next_log_func(level, re.sub("[\r\n\t]+", " ", message.strip()))
-
-
-class _DefaultArgsLogger(_BaseLogger):
-	def __init__(self, next_log_func, **kwargs):
-		_BaseLogger.__init__(self, next_log_func)
-		self._default_format_dict = kwargs
-
-	def log(self, level, template, *args, **kwargs):
-		# slow but whatever
-		if kwargs:
-			format_dict = dict(self._default_format_dict, **kwargs)
-		else:
-			format_dict = self._default_format_dict
-
-		_BaseLogger.log(self, level, template, *args, **format_dict)
-
-
-class _PrefixLogger(_BaseLogger):
-	@staticmethod
-	def template_escape(s):
-		return re.sub(r"[{}]", lambda m: m.group(0) * 2, s)
-
-	def __init__(self, next_log_func, prefix):
-		_BaseLogger.__init__(self, next_log_func)
-		self.prefix = prefix
-		self._escaped_prefix = self.template_escape(prefix)
-
-	def log(self, level, template, *args, **kwargs):
-		_BaseLogger.log(self, level, self._escaped_prefix + template, *args, **kwargs)
-
-	def extend(self, prefix_extra):
-		return _PrefixLogger(self._next_log_func, self.prefix + prefix_extra)
 
 
 class _NamedValue(object):
@@ -611,7 +537,7 @@ class _ChkDsk(object):
 				entry_name = long_name or entry.short_name_with_encoding("cp1252")
 				entry_cluster = entry.start_cluster()
 
-				if entry_cluster == 0 or entry.is_volume_id():
+				if entry.is_volume_id() or not self.volume._is_valid_cluster_num(entry_cluster):
 					continue
 
 				if dir_path == "\\":
@@ -631,7 +557,15 @@ class _ChkDsk(object):
 					already_checked_dirs.add(entry_cluster)
 					q.append(( entry_path, entry_cluster, cluster ))
 
-		alloc_checker.log_unmarked()
+		if alloc_checker:
+			alloc_checker.finalize_marked()
+			anonymous_heads = list(alloc_checker.find_anonymous_chains())
+			for start_cluster in anonymous_heads:
+				chain_length = alloc_checker.mark_chain(start_cluster)
+				self.log.info("Anonymous chain starts at {start:#010x} with length {length}",
+					start=start_cluster,
+					length=chain_length
+				)
 
 
 	def _check_dir(self, log, stream, dir_cluster, parent_cluster, allow_vol):
@@ -884,133 +818,3 @@ def _check_metadir(log, entry, long_name, expect_name, expect_cluster):
 			expect=expect_cluster,
 			got=entry.start_cluster()
 		)
-
-
-class _AllocChecker(object):
-	def __init__(self, volume, log):
-		self.volume = volume
-		self.log = log
-
-		self._index_to_name = [ "<FREE>", "<INVALID>" ]
-		self._name_to_index = dict((n, i) for i, n in enumerate(self._index_to_name))
-
-		table_size = self.volume._max_cluster_num + 1
-		if table_size <= 0:
-			raise ValueError("Volume has invalid cluster count")
-
-		self._ownership = array.array('L', itertools.repeat(0, table_size))
-		self._ownership[0] = 1
-		self._ownership[1] = 1
-
-		self._bad_count = 0
-		self._linked_bad_count = 0
-
-
-	def mark_chain(self, start_cluster, owner_name, byte_count=0):
-		if owner_name in self._name_to_index:
-			raise ValueError("Name {0!r} has already been used".format(owner_name))
-
-		log = _PrefixLogger(self.log.log, owner_name + " ")
-
-		owner_index = self._add_name(owner_name)
-		expect_cluster_count = (byte_count + self.volume._bytes_per_cluster - 1) / self.volume._bytes_per_cluster
-		actual_cluster_count = 0
-
-		prev_cluster_num = 0
-		cluster_num = start_cluster
-
-		def cluster_count_string():
-			return _plural(actual_cluster_count, "cluster", "clusters")
-
-		while not self.volume._is_eoc(cluster_num):
-			if cluster_num == 0:
-				log.invalid("links to free space after {cluster_count}",
-					cluster_count=cluster_count_string()
-				)
-				break
-
-			elif self.volume._is_bad(cluster_num):
-				self._bad_count += 1
-				self._linked_bad_count += 1
-				log.invalid("links to bad cluster at {prev_cluster_num:#010x} after {cluster_count}",
-					prev_cluster_num=prev_cluster_num,
-					cluster_count=cluster_count_string()
-				)
-				break
-
-			elif not self.volume._is_valid_cluster_num(cluster_num):
-				log.invalid("links to invalid cluster {cluster_num:#010x} after {cluster_count}",
-					cluster_num=cluster_num,
-					cluster_count=cluster_count_string()
-				)
-				break
-
-			elif self._ownership[cluster_num] != 0:
-				log.invalid("""is cross-linked with {other_owner}
-					at cluster {cluster_num:#010x}
-					after {cluster_count}""",
-					other_owner=self._index_to_name[self._ownership[cluster_num]],
-					cluster_num=cluster_num,
-					cluster_count=cluster_count_string()
-				)
-				break
-
-			else:
-				actual_cluster_count += 1
-				self._ownership[cluster_num] = owner_index
-				prev_cluster_num = cluster_num
-				cluster_num = self.volume._get_fat_entry(cluster_num)
-
-		if expect_cluster_count > 0 and actual_cluster_count != expect_cluster_count:
-			log.invalid("""is too {adjective}. Expected cluster count of
-				{expect} for {byte_count:#x} bytes, found {got}""",
-				adjective=actual_cluster_count > expect_cluster_count and "long" or "short",
-				expect=expect_cluster_count,
-				byte_count=byte_count,
-				got=actual_cluster_count
-			)
-
-		return actual_cluster_count
-
-
-	def log_unmarked(self):
-		unused_clusters = 0
-		unused_chains = 0
-
-		# TODO: for now, seek backwards, but what you really want to do is
-		# turn the FAT's singly linked list into a doubly-linked graph, and
-		# follow sinks (file ends) back up to sources, log the longest one, and
-		# any others linking in as cross-linked
-		for cluster_num in xrange(self.volume._max_cluster_num, 1, -1):
-			if self._ownership[cluster_num] != 0:
-				continue
-
-			fat_entry = self.volume._get_fat_entry(cluster_num)
-
-			if self.volume._is_bad(fat_entry):
-				self._bad_count += 1
-
-			elif fat_entry != 0:
-				unused_chains += 1
-				unused_clusters += self.mark_chain(
-					cluster_num, "<Unused chain #{0}>".format(unused_chains)
-				)
-
-		if self._bad_count > 0:
-			if self._linked_bad_count > 0:
-				self.log.invalid("Volume has {0} bad clusters, {1} of which truncate files", self._bad_count, self._linked_bad_count)
-			else:
-				self.log.info("Volume has {0} bad clusters", self._bad_count)
-
-		if unused_chains > 0:
-			self.log.uncommon("Discovered {cluster_count} in {chain_count}".format(
-				cluster_count=_plural(unused_clusters, "allocated unused cluster", "allocated unused clusters"),
-				chain_count=_plural(unused_chains, "chain", "chains"),
-			))
-
-
-	def _add_name(self, name):
-		new_index = len(self._index_to_name)
-		self._name_to_index[name] = new_index
-		self._index_to_name.append(name)
-		return new_index
