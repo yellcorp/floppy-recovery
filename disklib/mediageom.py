@@ -48,12 +48,6 @@ class DiskGeometry(object):
 			self.sector_size
 		)
 
-	def __str__(self):
-		return repr(self)
-
-	def __unicode__(self):
-		return repr(self)
-
 	def total_sector_count(self):
 		return self.cylinders * self.heads * self.sectors
 
