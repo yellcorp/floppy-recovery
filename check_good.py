@@ -110,7 +110,7 @@ def main():
 	paths = sys.argv[1:]
 
 	for i, path in enumerate(paths):
-		print("{0:3} {1!s}".format(i, path))
+		print("{0:3} {1}".format(i, path))
 
 	try:
 		streams_and_validity = [
