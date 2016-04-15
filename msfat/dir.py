@@ -15,6 +15,8 @@ UPDIR_NAME =   b"..         "
 DISALLOWED_IN_SHORT_NAME = frozenset(b'"*+,./:;<=>?[\\]|')
 DISALLOWED_IN_LONG_NAME =  frozenset('"*/:<>?\\|')
 
+FAT_TIME_YEAR_BASE = 1980
+
 
 def allowed_in_short_name(char):
 	return char == 0x05 or char >= 0x20 and char not in DISALLOWED_IN_SHORT_NAME
@@ -53,7 +55,7 @@ def unpack_fat_date(date16):
 	day =    date16 & 0x001F
 	month = (date16 & 0x01E0) >> 5
 	year =  (date16 & 0xFE00) >> 9
-	return (year + 1980, month, day)
+	return (year + FAT_TIME_YEAR_BASE, month, day)
 
 def unpack_fat_time(time16):
 	seconds = (time16 & 0x001F) << 1
