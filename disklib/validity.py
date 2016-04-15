@@ -127,14 +127,11 @@ def read_winimage_pasted(image_size, log_line_iter):
 	expected_size = _minimum_common_size(image_size)
 	geometry = DiskGeometry.from_image_size(expected_size)
 
-	bad_ranges = set(
-		range
-		for range in (
-			_parse_winimage_error(geometry, line)
-			for line in log_line_iter
-		)
-		if range
-	)
+	bad_ranges = set()
+
+	for bad_range in (_parse_winimage_error(geometry, line) for line in log_line_iter):
+		if bad_range:
+			bad_ranges.add(range)
 
 	if image_size < expected_size:
 		bad_ranges.add((image_size, expected_size))
