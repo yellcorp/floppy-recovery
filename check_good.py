@@ -23,7 +23,7 @@ NO_SOURCE = "-"
 
 def compare_span(start, expected_size, buffers, indices):
 	indexed_buffers = [ (i, buffers[i]) for i in indices ]
-	for char_index in xrange(expected_size):
+	for char_index in range(expected_size):
 		char_to_indexset = collections.defaultdict(set)
 
 		# map characters to the index of the stream that read them
@@ -37,7 +37,7 @@ def compare_span(start, expected_size, buffers, indices):
 			# sort by length of set, descending. this means the character that
 			# was read the most occurs first
 			by_votes = sorted(
-				char_to_indexset.iteritems(), key=lambda p: len(p[1]), reverse=True
+				char_to_indexset.items(), key=lambda p: len(p[1]), reverse=True
 			)
 
 			# is there a clear winner? the first set should have more members
@@ -49,14 +49,14 @@ def compare_span(start, expected_size, buffers, indices):
 				# nobody knows. mark with a ?
 				statchar = CHAR_NO_MAJORITY
 
-			print "{0} 0x{1:08X}".format(statchar, start + char_index),
+			print("{0} 0x{1:08X}".format(statchar, start + char_index), end=' ')
 			for char, indexset in by_votes:
 				if char == "":
-					print " /",
+					print(" /", end=' ')
 				else:
-					print "{0:02X}".format(ord(char)),
-				print repr(sorted(indexset)),
-			print
+					print("{0:02X}".format(ord(char)), end=' ')
+				print(repr(sorted(indexset)), end=' ')
+			print()
 
 
 ADDS = 0
@@ -76,7 +76,7 @@ def check_good(streams_and_validity):
 
 	events = [
 		(offset, sets[ADDS], sets[REMOVES]) for offset, sets in
-		sorted(events_by_offset.iteritems(), key=operator.itemgetter(0))
+		sorted(events_by_offset.items(), key=operator.itemgetter(0))
 	]
 
 	current_offset = 0
@@ -89,12 +89,14 @@ def check_good(streams_and_validity):
 
 			if max(len(b) for b in buffers) > 0:
 				if len(currently_good_indices) == 0:
-					print NO_SOURCE + " 0x{0:08X}-0x{1:08X}".format(
-						current_offset, next_offset)
+					print(NO_SOURCE, end=' ')
+					print("0x{0:08X}-0x{1:08X}".format(
+						current_offset, next_offset))
 
 				elif len(currently_good_indices) == 1:
-					print SINGLE_SOURCE + " 0x{0:08X}-0x{1:08X} ({2})".format(
-						current_offset, next_offset, list(currently_good_indices)[0])
+					print(SINGLE_SOURCE, end=' ')
+					print("0x{0:08X}-0x{1:08X} ({2})".format(
+						current_offset, next_offset, list(currently_good_indices)[0]))
 
 				else:
 					compare_span(current_offset, span_size, buffers, currently_good_indices)
@@ -108,7 +110,7 @@ def main():
 	paths = sys.argv[1:]
 
 	for i, path in enumerate(paths):
-		print "{0:3} {1!s}".format(i, path)
+		print("{0:3} {1!s}".format(i, path))
 
 	try:
 		streams_and_validity = [

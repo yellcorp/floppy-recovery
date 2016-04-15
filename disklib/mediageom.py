@@ -85,6 +85,6 @@ class DiskGeometry(object):
 
 if __name__ == '__main__':
 	fd = DiskGeometry.from_image_size(1474560)
-	print fd
-	print fd.total_bytes()
-	print fd.lba_to_chs(2879)
+	print(fd)
+	print(fd.total_bytes())
+	print(fd.lba_to_chs(2879))

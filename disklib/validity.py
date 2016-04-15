@@ -115,7 +115,8 @@ _WINIMAGE_ERROR = re.compile(
 def _parse_winimage_error(geometry, text):
 	match = _WINIMAGE_ERROR.match(text)
 	if match:
-		track, head = map(int, match.group("track", "head"))
+		track = int(match.group("track"))
+		head = int(match.group("head"))
 		bad_start = geometry.chs_to_byte(track, head, 1)
 		bad_len = geometry.sectors * geometry.sector_size
 		return (bad_start, bad_start + bad_len)
@@ -126,9 +127,14 @@ def read_winimage_pasted(image_size, log_line_iter):
 	expected_size = _minimum_common_size(image_size)
 	geometry = DiskGeometry.from_image_size(expected_size)
 
-	bad_ranges = set(filter(None,
-		(_parse_winimage_error(geometry, line) for line in log_line_iter)
-	))
+	bad_ranges = set(
+		range
+		for range in (
+			_parse_winimage_error(geometry, line)
+			for line in log_line_iter
+		)
+		if range
+	)
 
 	if image_size < expected_size:
 		bad_ranges.add((image_size, expected_size))

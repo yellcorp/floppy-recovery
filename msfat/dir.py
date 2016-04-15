@@ -28,10 +28,10 @@ def is_valid_long_name(s):
 	return all(allowed_in_long_name(c) for c in s)
 
 def is_long_name_correctly_padded(s):
-	null_pos = s.find(u"\0")
+	null_pos = s.find("\0")
 	if null_pos == -1:
 		return True
-	return all(c == u"\uFFFF" for c in s[null_pos + 1:])
+	return all(c == "\uFFFF" for c in s[null_pos + 1:])
 
 def short_name_checksum(short_name_bytes):
 	"""Calculates a single-byte checksum of a short name for use in
@@ -163,7 +163,7 @@ class FATDirEntry(Union):
 		usuffix = suffix.decode(encoding, "replace")
 
 		if usuffix:
-			return uprefix + u"." + usuffix
+			return uprefix + "." + usuffix
 		return uprefix
 
 	def short_name_checksum(self):
@@ -317,7 +317,7 @@ def assemble_long_entries(long_entries):
 	name_bytes.extend((0, 0))
 
 	name = name_bytes.decode("utf_16_le", "replace")
-	return name[:name.find(u"\0")]
+	return name[:name.find("\0")]
 
 
 def read_dir(stream):

@@ -32,11 +32,12 @@ def sequence(fore=None, back=None):
         codes.extend((38, 5, fore))
     if back is not None:
         codes.extend((48, 5, back))
-    return "\x1b[{0}m".format(";".join(map(str, codes)))
+    return "\x1b[{}m".format(";".join(map(str, codes)))
 
 
+# TODO: py3
 def _auto_string_type(arg):
-    if isinstance(arg, basestring):
+    if isinstance(arg, str):
         return type(arg)
     return str
 

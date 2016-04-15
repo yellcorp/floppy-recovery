@@ -16,13 +16,14 @@ ATTR_RESERVED_MASK =  0xFF ^ ATTR_VALID_MASK
 
 
 def _inline_hexdump(thing):
-	if isinstance(thing, basestring):
+	if isinstance(thing, str):
 		iterable = (ord(c) for c in thing)
 	else:
 		iterable = thing
 	return " ".join("{0:02X}".format(n) for n in iterable)
 
 
+# TODO: py3
 def _bytes_to_str(byte_iter):
 	return str(bytearray(byte_iter))
 

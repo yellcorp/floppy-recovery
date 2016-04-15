@@ -41,13 +41,13 @@ class _Node(object):
 	def __init__(self, index, value):
 		self.index = index
 		self.prevs = set()
-		self.next = 0
+		self.next_node = 0
 		self.value = value
 		self.label = 0
 		self.named = False
 
 	def has_next():
-		return self.next <= _MAX_VALID
+		return self.next_node <= _MAX_VALID
 
 
 class _AllocChecker(object):
@@ -72,31 +72,31 @@ class _AllocChecker(object):
 
 	def _load_fat(self):
 		nodes = [ None, None ]
-		for cluster_num in xrange(2, self._node_count):
+		for cluster_num in range(2, self._node_count):
 			value = self.volume._get_fat_entry(cluster_num)
 			nodes.append(_Node(cluster_num, value))
 
-		for cluster_num in xrange(2, self._node_count):
+		for cluster_num in range(2, self._node_count):
 			node = nodes[cluster_num]
 
 			if node.value == 0:
-				node.next = _FREE
+				node.next_node = _FREE
 				self._free_count += 1
 
 			elif self.volume._is_bad(node.value):
-				node.next = _BAD_CLUSTER
+				node.next_node = _BAD_CLUSTER
 				self._bad_count += 1
 
 			elif self.volume._is_eoc(node.value):
-				node.next = _NORMAL_END
+				node.next_node = _NORMAL_END
 
 			elif not self.volume._is_valid_cluster_num(node.value):
-				node.next = _INVALID
+				node.next_node = _INVALID
 				self._invalid_count += 1
 
 			else:
-				node.next = node.value
-				nodes[node.next].prevs.add(node.next)
+				node.next_node = node.value
+				nodes[node.next_node].prevs.add(node.next_node)
 
 		self._nodes = nodes
 
@@ -141,7 +141,7 @@ class _AllocChecker(object):
 				node.label = label
 
 			prev_cluster = cluster
-			cluster = node.next
+			cluster = node.next_node
 			actual_cluster_count += 1
 
 		if cluster > _MAX_VALID and cluster != _NORMAL_END:
@@ -174,19 +174,19 @@ class _AllocChecker(object):
 				incoming_node = self._nodes[incoming_index]
 				# break an anonymous chain if it leads into a named one
 				if incoming_node.label == 0:
-					incoming_node.next = _NAMED
+					incoming_node.next_node = _NAMED
 					node.prevs.remove(incoming_index)
 
-		for index in xrange(2, self._node_count):
+		for index in range(2, self._node_count):
 			node = self._nodes[index]
-			if not node.named and node.next not in (_BAD_CLUSTER, _FREE, _INVALID):
+			if not node.named and node.next_node not in (_BAD_CLUSTER, _FREE, _INVALID):
 				self._anonymous_count += 1
 
 
 	def find_anonymous_chains(self):
 		seen = bytearray(self._node_count)
 
-		for index in xrange(2, self._node_count):
+		for index in range(2, self._node_count):
 			# if we've seen it, skip it
 			if seen[index]:
 				continue
@@ -194,7 +194,7 @@ class _AllocChecker(object):
 			node = self._nodes[index]
 			# if it belongs to a named file, or it's free/bad with no incoming
 			# links, skip it
-			if node.named or (node.next in (_BAD_CLUSTER, _FREE) and not node.prevs):
+			if node.named or (node.next_node in (_BAD_CLUSTER, _FREE) and not node.prevs):
 				continue
 
 			# list of nodes we are tracing backwards to find heads

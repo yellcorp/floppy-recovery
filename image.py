@@ -79,7 +79,7 @@ def render_graphic(in_path, width, out_path):
 	ranges = disklib.validity.read_validity_for_file(in_path)
 	graphic_buffer = bytearray()
 
-	print in_path
+	print(in_path)
 	with open(in_path, "rb") as in_stream:
 		for is_good, start, end in ranges.iterall():
 			if is_good:

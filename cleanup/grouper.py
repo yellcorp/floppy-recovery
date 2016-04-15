@@ -46,7 +46,7 @@ def path_to_method_num(path):
 
 
 def copy(src, dest):
-	print "{0} -> {1}".format(src, dest)
+	print("{0} -> {1}".format(src, dest))
 	try:
 		shutil.copy2(src, dest)
 	except EnvironmentError as e:
@@ -68,7 +68,7 @@ def main():
 	for path, dirs, files in os.walk(in_root):
 		method_num = path_to_method_num(path)
 		if method_num is None:
-			print >> sys.stderr, "{0}: Unknown method".format(path)
+			print("{0}: Unknown method".format(path), file=sys.stderr)
 			continue
 
 		for f in files:
@@ -76,7 +76,7 @@ def main():
 				desc = PassFileDescriptor(os.path.join(path, f), method_num)
 				passes_by_name[desc.source_name].append(desc)
 
-	for desc_set in passes_by_name.itervalues():
+	for desc_set in passes_by_name.values():
 		ordered = sorted(desc_set, key=lambda d: (d.method_num, d.pass_num, d.path))
 		for new_pass_num, desc in enumerate(ordered):
 			copy_ima_and_log(

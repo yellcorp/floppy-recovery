@@ -43,15 +43,15 @@ _CAPACITY_TO_ROOT_CNT = {
 _REC_FAT16_ROOT_CNT = 0x0200
 
 _MEDIA_BYTE_REMOVABLE = 0xF0
-_VALID_MEDIA_BYTE = (_MEDIA_BYTE_REMOVABLE,) + tuple(xrange(0xF8, 0x100))
+_VALID_MEDIA_BYTE = (_MEDIA_BYTE_REMOVABLE,) + tuple(range(0xF8, 0x100))
 
 _DRIVE_NUM_REMOVABLE = 0x00
 _DRIVE_NUM_FIXED = 0x80
 _VALID_DRIVE_NUM = (_DRIVE_NUM_REMOVABLE, _DRIVE_NUM_FIXED)
 
 _FAT_TYPE_CLUSTER_COUNT_CUTOVER_VALUES = (4085, 65525)
-_VALID_BYTES_PER_SECTOR = tuple(1 << n for n in xrange(9, 13))
-_VALID_SECTORS_PER_CLUSTER = tuple(1 << n for n in xrange(0, 8))
+_VALID_BYTES_PER_SECTOR = tuple(1 << n for n in range(9, 13))
+_VALID_SECTORS_PER_CLUSTER = tuple(1 << n for n in range(0, 8))
 
 _FAT32_BPB_EXTFLAGS_RESERVED_BITS = 0b1111111101110000
 
@@ -102,7 +102,8 @@ class _NamedValue(object):
 
 	def __str__(self):
 		# TODO: i dunno
-		return unicode(self).encode("ascii", "replace")
+		# TODO: remind self the point of this and do it the py3 way
+		return str(self).encode("ascii", "replace")
 
 	def __unicode__(self):
 		return format(self.value, self.format)
@@ -417,7 +418,7 @@ class _ChkDsk(object):
 	def _check_fats(self):
 		prev_active_fat = self.volume.active_fat_index
 		
-		for fat_index in xrange(self.bpb.BPB_NumFATs):
+		for fat_index in range(self.bpb.BPB_NumFATs):
 			self.volume.active_fat_index = fat_index
 			if self.volume._calc_fat_sector_start() >= self.geometry.total_sector_count():
 				self.log.invalid("""Canceling FAT check at FAT[{stop_index}]: First
@@ -493,9 +494,9 @@ class _ChkDsk(object):
 		# so feeding it to xrange is correct
 		end_sector = self.volume._calc_fat_sector_start() + self.volume._fat_sector_count
 
-		for current_sector in xrange(start_sector, end_sector):
+		for current_sector in range(start_sector, end_sector):
 			sec = self.volume._read_sector(current_sector)
-			for b in xrange(start_byte, self.volume._bytes_per_sector):
+			for b in range(start_byte, self.volume._bytes_per_sector):
 				if sec[b] != '\0':
 					nonzeroes += 1
 
@@ -514,11 +515,11 @@ class _ChkDsk(object):
 
 		already_checked_dirs = set()
 
-		q = [ ( u"\\", 0, None ) ]
+		q = [ ( "\\", 0, None ) ]
 
 		while q:
 			dir_path, cluster, parent_cluster = q.pop(0)
-			log = _PrefixLogger(self.log.log, u"In dir {0}: ".format(dir_path))
+			log = _PrefixLogger(self.log.log, "In dir {0}: ".format(dir_path))
 
 			if cluster == 0:
 				stream = self.volume._open_root_dir()
@@ -575,7 +576,7 @@ class _ChkDsk(object):
 
 		def dispose_lfns(reason, *args, **kwargs):
 			if len(long_entries) > 0:
-				log.info(u"Orphaned LFN {lfn}: " + reason,
+				log.info("Orphaned LFN {lfn}: " + reason,
 					lfn=assemble_long_entries(long_entries),
 					*args, **kwargs
 				)
@@ -610,11 +611,11 @@ class _ChkDsk(object):
 
 			elif entry.is_long_name_segment():
 				if entry.LDIR_Type != 0:
-					log.invalid(u"LFN segment with unknown LDIR_Type {0:#04x}", entry.LDIR_Type)
+					log.invalid("LFN segment with unknown LDIR_Type {0:#04x}", entry.LDIR_Type)
 					continue
 
 				if entry.LDIR_FstClusLO != 0:
-					log.warn(u"""LFN segment {segment} with non-zero
+					log.warn("""LFN segment {segment} with non-zero
 						LDIR_FstClusLO {LDIR_FstClusLO:#04x}""",
 						segment=entry.long_name_segment(),
 						LDIR_FstClusLO=entry.LDIR_FstClusLO
@@ -625,17 +626,17 @@ class _ChkDsk(object):
 					long_entries = [ entry ]
 
 				elif len(long_entries) == 0:
-					log.info(u"Orphaned LFN sequence {lfn}: No final bit",
+					log.info("Orphaned LFN sequence {lfn}: No final bit",
 						lfn=assemble_long_entries([ entry ])
 					)
 
 				elif entry.long_name_ordinal() + 1 != long_entries[-1].long_name_ordinal():
-					dispose_lfns(u"Non sequential segment {segment}",
+					dispose_lfns("Non sequential segment {segment}",
 						segment=entry.long_name_segment()
 					)
 
 				elif entry.LDIR_Chksum != long_entries[-1].LDIR_Chksum:
-					dispose_lfns(u"Checksum mismatch in segment {segment}",
+					dispose_lfns("Checksum mismatch in segment {segment}",
 						segment=entry.long_name_segment()
 					)
 
@@ -659,13 +660,13 @@ class _ChkDsk(object):
 
 				if long_name is not None:
 					if not is_valid_long_name(long_name):
-						log.invalid(u"Long filename {lfn} is not valid", lfn=long_name)
+						log.invalid("Long filename {lfn} is not valid", lfn=long_name)
 
 					if not is_long_name_correctly_padded(long_name):
-						log.uncommon(u"Long filename {lfn} is not correctly padded", lfn=long_name)
+						log.uncommon("Long filename {lfn} is not correctly padded", lfn=long_name)
 
 					if long_name.lower() in seen_names:
-						log.invalid(u"Long filename {lfn} occurs more than once", lfn=long_name)
+						log.invalid("Long filename {lfn} occurs more than once", lfn=long_name)
 					else:
 						seen_names.add(long_name.lower())
 
@@ -720,8 +721,8 @@ class _ChkDsk(object):
 
 				elif entry.is_volume_id():
 					if long_name is not None:
-						log.uncommon("Volume label {short!b} has an associated long filename {long}",
-							short=entry.DIR_Name, long=long_name)
+						log.uncommon("Volume label {short_name!b} has an associated long filename {long_name}",
+							short_name=entry.DIR_Name, long_name=long_name)
 
 					if entry.DIR_FileSize != 0:
 						fnlog.uncommon("is a volume id with non-zero file size ({filesize:#010x})",

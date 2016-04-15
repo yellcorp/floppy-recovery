@@ -45,7 +45,7 @@ def unzip_image(zip_path, move_to_on_success=None):
 	with zipfile.ZipFile(zip_path, "r") as archive:
 		members = archive.infolist()
 		if len(members) != 1:
-			print >> sys.stderr, "Contains multiple files: {0}".format(zip_path)
+			print("Contains multiple files: {0}".format(zip_path), file=sys.stderr)
 			return
 
 		base_name = strip_exts(zip_path)
@@ -53,7 +53,7 @@ def unzip_image(zip_path, move_to_on_success=None):
 		_, member_ext = os.path.splitext(member.filename)
 		out_name = base_name + member_ext.lower()
 
-		print "{0} >> {1}".format(member.filename, out_name)
+		print("{0} >> {1}".format(member.filename, out_name))
 
 		with open(out_name, "wb") as out_stream:
 			zstream = archive.open(member, "r")
@@ -72,7 +72,7 @@ def unzip_image(zip_path, move_to_on_success=None):
 		relpath = os.path.relpath(zip_path, root)
 		move_dest = os.path.join(move_to_on_success, relpath)
 
-		print "{0} -> {1}".format(zip_path, move_dest)
+		print("{0} -> {1}".format(zip_path, move_dest))
 
 		move_parent = os.path.dirname(move_dest)
 		try:

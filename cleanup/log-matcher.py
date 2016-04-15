@@ -36,10 +36,10 @@ def get_arg_parser():
 
 class EchoAgent(object):
 	def rm(self, path):
-		print "rm {0!r}".format(path)
+		print("rm {0!r}".format(path))
 
 	def mv(self, src, dest):
-		print "mv {0!r} {1!r}".format(src, dest)
+		print("mv {0!r} {1!r}".format(src, dest))
 
 
 class ActuallyDoItAgent(object):
@@ -57,7 +57,7 @@ class ActuallyDoItAgent(object):
 			os.rename(old_src, src)
 
 		if os.path.exists(dest): # race condition, but i don't care
-			print >> sys.stderr, "Target exists: {0}".format(dest)
+			print("Target exists: {0}".format(dest), file=sys.stderr)
 			if old_src is not None:
 				os.rename(src, old_src)
 			return
@@ -98,7 +98,7 @@ def main():
 	for root in config.paths:
 		for path, dirnames, filenames in os.walk(root):
 			icase_map = dict((n.lower(), n) for n in filenames)
-			for iname in icase_map.iterkeys():
+			for iname in icase_map.keys():
 				barename, ext = os.path.splitext(iname)
 				if ext not in (".txt", ".log"):
 					continue
@@ -112,7 +112,7 @@ def main():
 				try_suffixes = ("", ".imz", ".ima")
 
 				try_names = set(p + s for p in try_prefixes for s in try_suffixes)
-				matched_names = filter(lambda n: n in icase_map, try_names)
+				matched_names = [ n for n in try_names if n in icase_map ]
 
 				log_name = icase_map[iname]
 
@@ -137,7 +137,7 @@ def main():
 						)
 
 	if not config.commit:
-		print "Specify -c/--commit to proceed."
+		print("Specify -c/--commit to proceed.")
 
 
 if __name__ == '__main__':

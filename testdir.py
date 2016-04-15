@@ -12,7 +12,7 @@ def main():
 	prog_errs = [ ]
 
 	for path in sys.argv[1:]:
-		print path
+		print(path)
 
 		try:
 			validity = disklib.validity.read_validity_for_file(path)
@@ -20,25 +20,25 @@ def main():
 				geometry = disklib.mediageom.DiskGeometry.from_image_size(validity.domain)
 				volume = msfat.volume.FATVolume(stream, geometry)
 
-				for k, v in volume.get_info()._asdict().iteritems():
-					if isinstance(v, (int, long)):
-						sv = "0x{0:08X}".format(v)
+				for k, v in volume.get_info()._asdict().items():
+					if isinstance(v, int):
+						sv = "0x{:08X}".format(v)
 					else:
 						sv = repr(v)
-					print "{0:24} {1}".format(k, sv)
+					print("{:24} {1}".format(k, sv))
 
 				for entry in msfat.dir.read_dir(volume._open_root_dir()):
-					print str(entry)
+					print(str(entry))
 
 		except Exception as e:
 			prog_errs.append((path, e))
 
-		print ""
+		print()
 
 	if prog_errs:
-		print "Program errors ({0}):".format(len(prog_errs))
+		print("Program errors ({0}):".format(len(prog_errs)))
 		for path, e in prog_errs:
-			print u"{0}: {1!s}".format(path, e)
+			print("{0}: {1!s}".format(path, e))
 
 
 if __name__ == '__main__':
