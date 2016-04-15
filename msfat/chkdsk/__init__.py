@@ -658,6 +658,12 @@ class _ChkDsk(object):
 					if not is_valid_long_name(long_name):
 						log.invalid("Long filename {lfn} is not valid", lfn=long_name)
 
+					# FIXME: by this point, is_long_name_correctly_padded will
+					# always return True because assemble_long_entries
+					# terminates the name at the first \0 it sees.
+
+					# could accumulate the bytes in a buffer first, check
+					# padding, THEN decode from utf16
 					if not is_long_name_correctly_padded(long_name):
 						log.uncommon("Long filename {lfn} is not correctly padded", lfn=long_name)
 
