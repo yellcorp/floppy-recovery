@@ -9,8 +9,8 @@ from msfat import ATTR_READ_ONLY, ATTR_HIDDEN, ATTR_SYSTEM, ATTR_VOLUME_ID, \
 	ATTR_RESERVED_MASK
 
 
-THISDIR_NAME = "{0:11s}".format(".")
-UPDIR_NAME =   "{0:11s}".format("..")
+THISDIR_NAME = b".          "
+UPDIR_NAME =   b"..         "
 
 
 def allowed_in_short_name(char):

@@ -1,6 +1,6 @@
-TYPE_FAT12 = "FAT12"
-TYPE_FAT16 = "FAT16"
-TYPE_FAT32 = "FAT32"
+TYPE_FAT12 = b"FAT12"
+TYPE_FAT16 = b"FAT16"
+TYPE_FAT32 = b"FAT32"
 
 
 ATTR_READ_ONLY =      0x01
@@ -21,11 +21,6 @@ def _inline_hexdump(thing):
 	else:
 		iterable = thing
 	return " ".join("{0:02X}".format(n) for n in iterable)
-
-
-# TODO: py3
-def _bytes_to_str(byte_iter):
-	return str(bytearray(byte_iter))
 
 
 class MediaError(Exception):

@@ -9,7 +9,7 @@ import string
 
 from msfat import TYPE_FAT12, TYPE_FAT16, TYPE_FAT32, \
 	ATTR_VOLUME_ID, ATTR_VALID_MASK, ATTR_RESERVED_MASK, \
-	MediaError, _inline_hexdump, _bytes_to_str
+	MediaError, _inline_hexdump
 
 from msfat.dir import FATDirEntry, assemble_long_entries, is_valid_short_name, \
 	is_valid_long_name, is_long_name_correctly_padded, THISDIR_NAME, \
@@ -57,25 +57,25 @@ _FAT32_MAX_ALLOWED_CLUSTER_COUNT = 0x0FFFFFF5
 _EXT_BOOTSIG = 0x29
 
 _FAT_SIG_OFFSET = 510
-_FAT_SIG = "\x55\xAA"
+_FAT_SIG = b"\x55\xAA"
 
 _NULL_DIR_ENTRY = '\0' * sizeof(FATDirEntry)
 
 _TYPES_TO_XBSTYPE = {
-	TYPE_FAT32: ("FAT32   ",),
-	TYPE_FAT16: ("FAT16   ", "FAT     "),
-	TYPE_FAT12: ("FAT12   ", "FAT     ")
+	TYPE_FAT32: (b"FAT32   ",),
+	TYPE_FAT16: (b"FAT16   ", b"FAT     "),
+	TYPE_FAT12: (b"FAT12   ", b"FAT     ")
 }
 
-_BS_LABEL_NO_NAME = "{0:11s}".format("NO NAME")
+_BS_LABEL_NO_NAME = b"NO NAME    "
 
 
 def chkdsk(volume, user_log_func):
 	_ChkDsk(volume, user_log_func).run()
 
 
-def _is_common_jmpboot(bytes):
-	return (bytes[0] == 0xEB and bytes[2] == 0x90) or bytes[0] == 0xE9
+def _is_common_jmpboot(jmpboot):
+	return (jmpboot[0] == 0xEB and jmpboot[2] == 0x90) or jmpboot[0] == 0xE9
 
 
 class _ChkDskFormatter(string.Formatter):
@@ -83,7 +83,7 @@ class _ChkDskFormatter(string.Formatter):
 		if conversion == 'h':
 			return _inline_hexdump(value)
 		elif conversion == 'b':
-			return repr(_bytes_to_str(value))
+			return repr(bytes(value))
 		else:
 			return string.Formatter.convert_field(self, value, conversion)
 
@@ -99,12 +99,10 @@ class _NamedValue(object):
 		self.format = format
 
 	def __str__(self):
-		# TODO: i dunno
-		# TODO: remind self the point of this and do it the py3 way
-		return str(self).encode("ascii", "replace")
-
-	def __unicode__(self):
 		return format(self.value, self.format)
+
+	def __bytes__(self):
+		return str(self).encode("ascii", "replace")
 
 	def __format__(self, format_spec):
 		return format(self.value, format_spec or self.format)
@@ -352,7 +350,7 @@ class _ChkDsk(object):
 			6, self.log.uncommon, self.log.invalid
 		)
 
-		if _bytes_to_str(self.bpb32.BPB_Reserved) != '\0' * 12:
+		if bytes(self.bpb32.BPB_Reserved) != b'\0' * 12:
 			self.log.uncommon("Non-zero bytes in BPB_Reserved {bpb32.BPB_Reserved!h}")
 
 		if self.volume._cluster_count > _FAT32_MAX_ALLOWED_CLUSTER_COUNT:
@@ -380,7 +378,7 @@ class _ChkDsk(object):
 		self.log.info("BS_VolID is {bpbx.BS_VolID:#010x}")
 		self.log.info("BS_VolLab is {bpbx.BS_VolLab!b}")
 
-		fstype_str = _bytes_to_str(self.bpbx.BS_FilSysType)
+		fstype_str = bytes(self.bpbx.BS_FilSysType)
 		if fstype_str not in _TYPES_TO_XBSTYPE[self.volume.fat_type]:
 			xbs_log_func("""BS_FilSysType doesn't match determined filesystem
 				type of {volume.fat_type}: {bpbx.BS_FilSysType!b}""")
@@ -592,7 +590,7 @@ class _ChkDsk(object):
 
 				if (
 					self.bpbx.BS_BootSig == _EXT_BOOTSIG and
-					_bytes_to_str(self.bpbx.BS_VolLab) != _BS_LABEL_NO_NAME and 
+					bytes(self.bpbx.BS_VolLab) != _BS_LABEL_NO_NAME and 
 					allow_vol and not seen_vol
 				):
 					log.uncommon("BS_VolLab is set ({bpbx.BS_VolLab!b}) but no volume id directory entry present")
@@ -668,7 +666,7 @@ class _ChkDsk(object):
 					else:
 						seen_names.add(long_name.lower())
 
-				short_name = _bytes_to_str(entry.DIR_Name)
+				short_name = bytes(entry.DIR_Name)
 				if not is_valid_short_name(short_name):
 					log.invalid("Short filename {sfn!r} is not valid", sfn=short_name)
 
@@ -683,7 +681,7 @@ class _ChkDsk(object):
 					elif seen_vol:
 						log.invalid("Extra volume id {sfn!r}", sfn=short_name)
 					else:
-						if self.bpbx.BS_BootSig == _EXT_BOOTSIG and short_name != _bytes_to_str(self.bpbx.BS_VolLab):
+						if self.bpbx.BS_BootSig == _EXT_BOOTSIG and short_name != bytes(self.bpbx.BS_VolLab):
 							log.uncommon("Volume id {sfn!r} doesn't match BS_VolLab {bpbx.BS_VolLab!b}", sfn=short_name)
 						seen_vol = True
 					if entry.DIR_Attr & ATTR_VALID_MASK & (~ATTR_VOLUME_ID):
@@ -714,7 +712,7 @@ class _ChkDsk(object):
 							filesize=entry.DIR_FileSize
 						)
 
-					if entry.start_cluster() == 0 and _bytes_to_str(entry.DIR_Name) != UPDIR_NAME: # updir links are zero to say the parent is the root dir
+					if entry.start_cluster() == 0 and bytes(entry.DIR_Name) != UPDIR_NAME: # updir links are zero to say the parent is the root dir
 						fnlog.invalid("is a directory with zero start cluster")
 
 				elif entry.is_volume_id():
@@ -798,7 +796,7 @@ def _check_direntry_time(log, attr_name, value):
 
 
 def _check_metadir(log, entry, long_name, expect_name, expect_cluster):
-	name = _bytes_to_str(entry.DIR_Name)
+	name = bytes(entry.DIR_Name)
 	dirlog = log.extend("Metadir {0!r} ".format(expect_name))
 
 	if name != expect_name:
