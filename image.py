@@ -46,7 +46,7 @@ def parse_product(width_expr):
 
 
 def error_map(b):
-	return (b / 2 + 128, b, int(b * 0.25), 255)
+	return (b // 2 + 128, b, int(b * 0.25), 255)
 
 
 def gray_map(b):
@@ -69,7 +69,7 @@ def append_pixels(in_stream, count, out_bytearray, byte_to_pixel_function, void_
 		else:
 			out_bytearray.extend(
 				itertools.chain(
-					*(byte_to_pixel_function(ord(ch)) for ch in b)
+					*(byte_to_pixel_function(ch) for ch in b)
 				)
 			)
 			bytes_read += len(b)
