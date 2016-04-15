@@ -5,7 +5,7 @@ def rgb(r, g, b):
     """Returns a xterm256 color index that represents the specified RGB color.
     Each argument should be an integer in the range [0, 5]."""
 
-    if r<0 or r>5 or g<0 or g>5 or b<0 or b>5:
+    if r < 0 or r > 5 or g < 0 or g > 5 or b < 0 or b > 5:
         raise ValueError("Value out of range")
 
     return 16 + r * 36 + g * 6 + b
@@ -35,28 +35,17 @@ def sequence(fore=None, back=None):
     return "\x1b[{}m".format(";".join(map(str, codes)))
 
 
-# TODO: py3
-def _auto_string_type(arg):
-    if isinstance(arg, str):
-        return type(arg)
-    return str
-
-
-def wrap(text, fore=None, back=None, string_type=None):
-    if string_type is None:
-        string_type = _auto_string_type(text)
+def wrap(text, fore=None, back=None):
     if fore is None and back is None:
-        return string_type(text)
+        return str(text)
     return "".join([
         sequence(fore, back),
-        string_type(text),
+        str(text),
         ANSI_RESET])
 
 
-def ignore(text, fore=None, back=None, string_type=None):
-    if string_type is None:
-        string_type = _auto_string_type(text)
-    return string_type(text)
+def ignore(text, fore=None, back=None):
+    return str(text)
 
 
 def wrap_for_stream(stream):
