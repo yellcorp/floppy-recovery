@@ -22,7 +22,7 @@ def main():
 
 				for k, v in volume.get_info()._asdict().items():
 					if isinstance(v, int):
-						sv = "0x{:08X}".format(v)
+						sv = "{:#010x}".format(v)
 					else:
 						sv = repr(v)
 					print("{:24} {1}".format(k, sv))

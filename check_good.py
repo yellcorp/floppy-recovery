@@ -49,7 +49,7 @@ def compare_span(start, expected_size, buffers, indices):
 				# nobody knows. mark with a ?
 				statchar = CHAR_NO_MAJORITY
 
-			print("{0} 0x{1:08X}".format(statchar, start + char_index), end=' ')
+			print("{0} {1:#010x}".format(statchar, start + char_index), end=' ')
 			for char, indexset in by_votes:
 				if char == "":
 					print(" /", end=' ')
@@ -90,12 +90,12 @@ def check_good(streams_and_validity):
 			if max(len(b) for b in buffers) > 0:
 				if len(currently_good_indices) == 0:
 					print(NO_SOURCE, end=' ')
-					print("0x{0:08X}-0x{1:08X}".format(
+					print("{0:#010x}-{1:#010x}".format(
 						current_offset, next_offset))
 
 				elif len(currently_good_indices) == 1:
 					print(SINGLE_SOURCE, end=' ')
-					print("0x{0:08X}-0x{1:08X} ({2})".format(
+					print("{0:#010x}-{1:#010x} ({2})".format(
 						current_offset, next_offset, list(currently_good_indices)[0]))
 
 				else:
