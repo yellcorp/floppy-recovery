@@ -1,4 +1,4 @@
-#!/usr/local/bin/python
+#!/usr/bin/env python3
 
 # This is awful. What it does is scan the specified root paths, recursively,
 # for zip files (checking magic number, not extension), and unzips those which
