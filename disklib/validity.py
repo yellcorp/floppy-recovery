@@ -1,3 +1,5 @@
+from disklib.mediageom import DiskGeometry
+
 import codecs
 import itertools
 import json
@@ -5,8 +7,6 @@ import operator
 import os
 import re
 import sys
-
-from disklib.mediageom import DiskGeometry
 
 
 def _normalize_ranges(ranges):
@@ -107,7 +107,7 @@ def _minimum_common_size(s):
 	for cs in _COMMON_SIZES:
 		if s <= cs:
 			return cs
-	raise ValueError("No common size that can acommodate an image of {0} bytes".format(s))
+	raise ValueError("No common size that can accommodate an image of {} bytes".format(s))
 
 
 _WINIMAGE_ERROR = re.compile(

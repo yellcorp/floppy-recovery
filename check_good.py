@@ -7,11 +7,11 @@
 # are multiple reads of the same image, warns about any data in 'good' areas
 # that differ between files.
 
+import disklib.validity
+
 import collections
 import operator
 import sys
-
-import disklib.validity
 
 
 # status dingbats
@@ -54,7 +54,7 @@ def compare_span(start, expected_size, buffers, indices):
 				if char == "":
 					print(" /", end=' ')
 				else:
-					print("{0:02X}".format(ord(char)), end=' ')
+					print("{0:02x}".format(ord(char)), end=' ')
 				print(repr(sorted(indexset)), end=' ')
 			print()
 
@@ -71,7 +71,7 @@ def check_good(streams_and_validity):
 			# to the set of expected good streams
 			events_by_offset[good_start][ADDS].add(i)
 			# an event occurs at <good_end> bytes which REMOVES stream i
-			# to the set of expected good streams
+			# from the set of expected good streams
 			events_by_offset[good_end][REMOVES].add(i)
 
 	events = [

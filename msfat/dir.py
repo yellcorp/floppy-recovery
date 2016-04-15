@@ -98,7 +98,7 @@ class _FATShortDirEntry(LittleEndianStructure):
 
 		("DIR_Attr",         c_ubyte), # 0xC0 bits are reserved, set to 0
 		("DIR_NTRes",        c_ubyte), # Reserved by Win NT, set to 0
-		("DIR_CrtTimeTenth", c_ubyte), # / 100 and add to create time
+		("DIR_CrtTimeTenth", c_ubyte), # / 100 and add to create time - yes despite 'Tenth' in the name
 		("DIR_CrtTime",      c_uint16),
 		("DIR_CrtDate",      c_uint16),
 		("DIR_LstAccDate",   c_uint16),

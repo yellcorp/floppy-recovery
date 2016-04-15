@@ -25,7 +25,7 @@ def main():
 						sv = "{:#010x}".format(v)
 					else:
 						sv = repr(v)
-					print("{:24} {1}".format(k, sv))
+					print("{0:24} {1}".format(k, sv))
 
 				for entry in msfat.dir.read_dir(volume._open_root_dir()):
 					print(str(entry))
@@ -36,7 +36,7 @@ def main():
 		print()
 
 	if prog_errs:
-		print("Program errors ({0}):".format(len(prog_errs)))
+		print("Program errors ({}):".format(len(prog_errs)))
 		for path, e in prog_errs:
 			print("{0}: {1!s}".format(path, e))
 

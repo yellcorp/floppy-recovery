@@ -1,14 +1,14 @@
 #!/usr/local/bin/python
 
 
-import argparse
-import itertools
-import os
+import disklib
+import disklib.validity
 
 import PIL.Image
 
-import disklib
-import disklib.validity
+import argparse
+import itertools
+import os
 
 
 def get_arg_parser():

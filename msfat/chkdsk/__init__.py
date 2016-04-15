@@ -24,12 +24,6 @@ from msfat.chkdsk.alloc import _AllocChecker
 import disklib
 
 
-# need to add 2 as the formatter counts the 0x prefix as part of the width
-_FMT_U32 = "#010x"
-_FMT_U16 = "#06x"
-_FMT_U8 =  "#04x"
-
-
 _MAX_CLUSTER_BYTES = 0x8000
 
 # http://www.pcguide.com/ref/fdd/formatFile-c.html
@@ -94,6 +88,10 @@ class _ChkDskFormatter(string.Formatter):
 			return string.Formatter.convert_field(self, value, conversion)
 
 
+# need to add 2 as the formatter counts the 0x prefix as part of the width
+_FMT_U32 = "#010x"
+_FMT_U16 = "#06x"
+_FMT_U8 =  "#04x"
 class _NamedValue(object):
 	def __init__(self, name, value, format=""):
 		self.name = name
