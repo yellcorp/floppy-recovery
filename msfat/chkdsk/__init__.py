@@ -1,12 +1,3 @@
-from ctypes import sizeof
-import array
-import calendar
-import collections
-import itertools
-import operator
-import string
-
-
 from msfat import TYPE_FAT12, TYPE_FAT16, TYPE_FAT32, \
     ATTR_VOLUME_ID, ATTR_VALID_MASK, ATTR_RESERVED_MASK, \
     MediaError, _inline_hexdump
@@ -22,6 +13,15 @@ from msfat.chkdsk.log import _INVALID, _UNCOMMON, _INFO, \
 from msfat.chkdsk.alloc import _AllocChecker
 
 import disklib
+
+
+from ctypes import sizeof
+import array
+import calendar
+import collections
+import itertools
+import operator
+import string
 
 
 _MAX_CLUSTER_BYTES = 0x8000
@@ -93,19 +93,19 @@ _FMT_U32 = "#010x"
 _FMT_U16 = "#06x"
 _FMT_U8 =  "#04x"
 class _NamedValue(object):
-    def __init__(self, name, value, format=""):
+    def __init__(self, name, value, format_str=""):
         self.name = name
         self.value = value
-        self.format = format
+        self.format_str = format_str
 
     def __str__(self):
-        return format(self.value, self.format)
+        return format(self.value, self.format_str)
 
     def __bytes__(self):
         return str(self).encode("ascii", "replace")
 
     def __format__(self, format_spec):
-        return format(self.value, format_spec or self.format)
+        return format(self.value, format_spec or self.format_str)
 
 
 def _check_contains(query_set, named_value, log_func):
@@ -222,7 +222,7 @@ class _ChkDsk(object):
         if self.volume._total_sector_count != self.geometry.total_sector_count():
             geom_value = self.geometry.total_sector_count()
             bpb_value = self.volume._total_sector_count
-            sign, log_func = (bpb_value > geom_val) and ('>', self.log.invalid) or ('<', self.log.uncommon)
+            sign, log_func = (bpb_value > geom_value) and ('>', self.log.invalid) or ('<', self.log.uncommon)
             log_func("""BPB sector count {sign} Geometry sector count
                 ({bpb_value:#010x} {sign} {geom_value:#010x})""",
                 sign=sign, bpb_value=bpb_value, geom_value=geom_value
@@ -308,7 +308,7 @@ class _ChkDsk(object):
 
         elif self.bpb16.BS_DrvNum == _DRIVE_NUM_FIXED and self.bpb.BPB_Media == _MEDIA_BYTE_REMOVABLE:
             self.log.uncommon("""BS_DrvNum is fixed ({bpb16.BS_DrvNum:#04x})
-                but BPB_Media is removable (\{bpb.BPB_Media:#04x})""")
+                but BPB_Media is removable ({bpb.BPB_Media:#04x})""")
 
 
     def _check_bpb32(self):
@@ -328,7 +328,7 @@ class _ChkDsk(object):
         if self.bpb.BPB_FATSz32 == 0:
             self.log.invalid("Zero BPB_FATSz32 is invalid for {volume.fat_type} volumes")
 
-        if (sefl.bpb32.BPB_ExtFlags & _FAT32_BPB_EXTFLAGS_RESERVED_BITS) != 0:
+        if (self.bpb32.BPB_ExtFlags & _FAT32_BPB_EXTFLAGS_RESERVED_BITS) != 0:
             self.log.uncommon("""Reserved bits in BPB_ExtFlags are set:
                 {bpb32.BPB_ExtFlags:#06x} ({bpb32.BPB_ExtFlags:#016b})""")
 
@@ -579,12 +579,12 @@ class _ChkDsk(object):
                 long_entries[:] = [ ]
 
         while True:
-            bytes = stream.read(sizeof(FATDirEntry))
-            if len(bytes) == 0:
+            entry_bytes = stream.read(sizeof(FATDirEntry))
+            if len(entry_bytes) == 0:
                 log.invalid("Reached end of directory without seeing end marker")
                 return
 
-            entry = FATDirEntry.from_buffer_copy(bytes)
+            entry = FATDirEntry.from_buffer_copy(entry_bytes)
             if entry.is_last_in_dir():
                 dispose_lfns("End of directory reached")
 
@@ -595,7 +595,7 @@ class _ChkDsk(object):
                 ):
                     log.uncommon("BS_VolLab is set ({bpbx.BS_VolLab!b}) but no volume id directory entry present")
 
-                if bytes != _NULL_DIR_ENTRY:
+                if entry_bytes != _NULL_DIR_ENTRY:
                     log.info("End of dir has non-null data: {name!b}", name=entry.DIR_Name)
 
                 _check_dir_trail(log, stream)
@@ -763,11 +763,11 @@ class _ChkDsk(object):
 
 def _check_dir_trail(log, stream):
     while True:
-        bytes = stream.read(sizeof(FATDirEntry))
-        if len(bytes) == 0:
+        entry_bytes = stream.read(sizeof(FATDirEntry))
+        if len(entry_bytes) == 0:
             return
-        if bytes != _NULL_DIR_ENTRY:
-            entry = FATDirEntry.from_buffer_copy(bytes)
+        if entry_bytes != _NULL_DIR_ENTRY:
+            entry = FATDirEntry.from_buffer_copy(entry_bytes)
             log.info("Trailing entry: {name!b}", name=entry.DIR_Name)
 
 

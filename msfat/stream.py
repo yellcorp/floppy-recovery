@@ -12,6 +12,9 @@ class _BaseStream(object):
             count -= len(chunk)
         return "".join(bufs)
 
+    def _read_chunk(self, count):
+        raise NotImplementedError()
+
 
 class SectorRunStream(_BaseStream):
     def __init__(self, vol, sector, count):
@@ -49,14 +52,14 @@ class SectorRunStream(_BaseStream):
 
 
 class ClusterChainStream(_BaseStream):
-    def __init__(self, vol, cluster, bytes=-1, ignore_bad_clusters=False):
+    def __init__(self, vol, cluster, byte_count=-1, ignore_bad_clusters=False):
         self.ignore_bad_clusters = ignore_bad_clusters
 
         self._vol = vol
         self._cur_cluster = -1
         self._next_cluster = cluster
         self._is_last = False
-        self._bytes_left = bytes
+        self._bytes_left = byte_count
         self._seen = set()
 
         self._buf = None

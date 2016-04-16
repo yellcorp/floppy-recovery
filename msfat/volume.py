@@ -287,8 +287,8 @@ class FATVolume(object):
 
         # adding bytes_per_sector - 1 has the effect of performing a ceil
         # when using integer division. don't need to ceil it twice
-        bytes = (b.BPB_RootEntCnt * 32) + (self._bytes_per_sector - 1)
-        return bytes / self._bytes_per_sector
+        byte_count = (b.BPB_RootEntCnt * 32) + (self._bytes_per_sector - 1)
+        return byte_count // self._bytes_per_sector
 
     def _calc_data_sector_start(self):
         return self._root_dir_sector_start + self._root_dir_sector_count

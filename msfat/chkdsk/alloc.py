@@ -46,7 +46,7 @@ class _Node(object):
         self.label = 0
         self.named = False
 
-    def has_next():
+    def has_next(self):
         return self.next_node <= _MAX_VALID
 
 

@@ -42,11 +42,11 @@ FORMAT = "png"
 
 
 def parse_product(width_expr):
-    return disklib.product(map(int, width_expr.split("*")))
+    return disklib.product(int(n) for n in width_expr.split("*"))
 
 
 def error_map(b):
-    return (b // 2 + 128, b, int(b * 0.25), 255)
+    return (b // 2 + 128, b, b // 4, 255)
 
 
 def gray_map(b):

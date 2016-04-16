@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 
-import os.path
-import sys
-
 import disklib.mediageom
 import disklib.validity
 import msfat.chkdsk
 import msfat.volume
+
+import sys
 
 
 LOGLEVEL_TO_PREFIX = {

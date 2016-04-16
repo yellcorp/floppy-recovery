@@ -15,7 +15,7 @@ ATTR_VALID_MASK =     ATTR_LONG_NAME_MASK
 ATTR_RESERVED_MASK =  0xFF ^ ATTR_VALID_MASK
 
 
-def _inline_hexdump(thing):
+def _inline_hexdump(iterable):
     return " ".join("{0:02X}".format(n) for n in iterable)
 
 

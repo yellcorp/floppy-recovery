@@ -1,12 +1,9 @@
+from msfat import ATTR_READ_ONLY, ATTR_HIDDEN, ATTR_SYSTEM, ATTR_VOLUME_ID, \
+    ATTR_DIRECTORY, ATTR_ARCHIVE, ATTR_LONG_NAME, ATTR_LONG_NAME_MASK
+
 from ctypes import LittleEndianStructure, Union, sizeof, c_ubyte, c_uint16, c_uint32
 import calendar
-import itertools
 import time
-
-
-from msfat import ATTR_READ_ONLY, ATTR_HIDDEN, ATTR_SYSTEM, ATTR_VOLUME_ID, \
-    ATTR_DIRECTORY, ATTR_ARCHIVE, ATTR_LONG_NAME, ATTR_LONG_NAME_MASK, \
-    ATTR_RESERVED_MASK
 
 
 THISDIR_NAME = b".          "
@@ -73,7 +70,7 @@ def fat_time_to_unix(date16, time16, add_seconds=0, timezone=None):
     If it is omitted or None, the timestamp is interpreted in the current
     timezone."""
 
-    struct_time = unpack_fat_date(date16) + unpack_fat_time(date16)
+    struct_time = unpack_fat_date(date16) + unpack_fat_time(time16)
     if timezone is None:
         epoch = time.mktime(struct_time)
     else:
@@ -328,12 +325,12 @@ def assemble_long_entries(long_entries):
 def read_dir(stream):
     long_entries = [ ]
     while True:
-        bytes = stream.read(sizeof(FATDirEntry))
-        if len(bytes) == 0:
+        entry_bytes = stream.read(sizeof(FATDirEntry))
+        if len(entry_bytes) == 0:
             # this is unexpected if we're not intentionally reading beyond end
             break
 
-        entry = FATDirEntry.from_buffer_copy(bytes)
+        entry = FATDirEntry.from_buffer_copy(entry_bytes)
         if entry.is_last_in_dir():
             break
         elif entry.is_free_entry():

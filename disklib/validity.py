@@ -6,7 +6,6 @@ import json
 import operator
 import os
 import re
-import sys
 
 
 def _normalize_ranges(ranges):
@@ -146,7 +145,7 @@ def read_winimage_scripted(image_size, log_line_iter):
     bad_ranges = set()
 
     for line in log_line_iter:
-        enc_dialog, success_str, retries_str = line.split("\t")
+        enc_dialog, success_str, _ = line.split("\t")
         if success_str == "True":
             continue
         dialog_text = json.loads('"' + enc_dialog + '"')

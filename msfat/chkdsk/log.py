@@ -1,4 +1,6 @@
 import re
+import string
+
 
 # Log levels match values of equivalent severity in python logging module
 # Short names privately...
