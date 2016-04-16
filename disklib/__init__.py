@@ -11,4 +11,4 @@ CAPACITY_360K = 368640
 
 
 def product(iterable):
-	return functools.reduce(operator.mul, iterable, 1)
+    return functools.reduce(operator.mul, iterable, 1)

@@ -16,16 +16,16 @@ ATTR_RESERVED_MASK =  0xFF ^ ATTR_VALID_MASK
 
 
 def _inline_hexdump(thing):
-	return " ".join("{0:02X}".format(n) for n in iterable)
+    return " ".join("{0:02X}".format(n) for n in iterable)
 
 
 class MediaError(Exception):
-	pass
+    pass
 
 
 class SeekError(MediaError):
-	pass
+    pass
 
 
 class AllocationError(MediaError):
-	pass
+    pass
