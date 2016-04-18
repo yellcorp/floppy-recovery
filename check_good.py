@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+
 # Checks that the presumed good areas of disk images match
 
 # This script takes multiple disk image files, and loads their associated error

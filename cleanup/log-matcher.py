@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+
 # Cleans up logs. Pairs .txt or .log files with their corresponding image files
 # Deletes log files without a matching image file
 # Names log and image files consistently
