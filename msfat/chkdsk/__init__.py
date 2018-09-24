@@ -59,7 +59,7 @@ _EXT_BOOTSIG = 0x29
 _FAT_SIG_OFFSET = 510
 _FAT_SIG = b"\x55\xAA"
 
-_NULL_DIR_ENTRY = '\0' * sizeof(FATDirEntry)
+_NULL_DIR_ENTRY = bytes(sizeof(FATDirEntry))
 
 _TYPES_TO_XBSTYPE = {
     TYPE_FAT32: (b"FAT32   ",),

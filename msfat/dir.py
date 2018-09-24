@@ -150,7 +150,7 @@ class FATDirEntry(Union):
         if name[0] == _INITIAL_0XE5_PLACEHOLDER:
             name[0] = 0xE5
 
-        return str(name[:8]).rstrip(), str(name[8:]).rstrip()
+        return bytes(name[:8]).rstrip(), bytes(name[8:]).rstrip()
 
     def short_name(self):
         prefix, suffix = self._name_parts()

@@ -10,7 +10,7 @@ class _BaseStream(object):
             if len(chunk) == 0:
                 break
             count -= len(chunk)
-        return "".join(bufs)
+        return b"".join(bufs)
 
     def _read_chunk(self, count):
         raise NotImplementedError()
@@ -34,7 +34,7 @@ class SectorRunStream(_BaseStream):
             self._load_cur_sector()
 
         if self._cur_sector == self._end_sector:
-            return ""
+            return b""
 
         actual_count = min(count, self._buf_left)
 
@@ -68,13 +68,13 @@ class ClusterChainStream(_BaseStream):
 
     def _read_chunk(self, count):
         if count == 0 or self._bytes_left == 0:
-            return ""
+            return b""
 
         if self._buf_left == 0:
             # hit the end of the last cluster on a stream with unknown size
             # end here
             if self._bytes_left < 0 and self._is_last:
-                return ""
+                return b""
             else:
                 self._load_next_cluster()
 

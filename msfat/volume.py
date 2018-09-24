@@ -257,7 +257,7 @@ class FATVolume(object):
 
         self._cluster_count = 0
         if self._bpb.BPB_SecPerClus > 0:
-            self._cluster_count = self._data_sector_count / self._bpb.BPB_SecPerClus
+            self._cluster_count = self._data_sector_count // self._bpb.BPB_SecPerClus
         self._max_cluster_num = self._cluster_count + 1
 
 

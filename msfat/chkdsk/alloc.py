@@ -110,7 +110,7 @@ class _AllocChecker(object):
         log = _PrefixLogger(self.log.log, name + " ")
         log_func = has_name and log.invalid or log.info
 
-        expect_cluster_count = (expect_bytes + self.volume._bytes_per_cluster - 1) / self.volume._bytes_per_cluster
+        expect_cluster_count = (expect_bytes + self.volume._bytes_per_cluster - 1) // self.volume._bytes_per_cluster
         actual_cluster_count = 0
 
         def cluster_count_string():
